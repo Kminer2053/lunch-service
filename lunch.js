@@ -397,11 +397,11 @@ async function selectSearchResult(item) {
                     const sourceText = document.getElementById('walk-source-text');
                     if (sourceGroup && sourceText) {
                         sourceGroup.style.display = 'block';
-                        if (geoData.data.walk_source === 'google') {
-                            sourceText.textContent = '도보 소요시간은 Google Directions API로 계산되었습니다.';
+                        if (geoData.data.walk_source === 'tmap') {
+                            sourceText.textContent = '도보 소요시간은 TMAP API로 계산되었습니다.';
                             sourceText.style.color = 'var(--primary)';
                         } else {
-                            sourceText.textContent = '도보 소요시간은 직선거리로 추정되었습니다. (Google Directions API는 한국에서 도보 모드를 지원하지 않습니다)';
+                            sourceText.textContent = '도보 소요시간은 직선거리로 추정되었습니다.';
                             sourceText.style.color = 'var(--text-secondary)';
                         }
                     }
