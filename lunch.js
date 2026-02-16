@@ -400,6 +400,9 @@ async function selectSearchResult(item) {
                         if (geoData.data.walk_source === 'google') {
                             sourceText.textContent = '도보 소요시간은 Google Directions API로 계산되었습니다.';
                             sourceText.style.color = 'var(--primary)';
+                        } else if (geoData.data.walk_source === 'google_fallback') {
+                            sourceText.textContent = 'Google API를 시도했으나 경로를 찾지 못해 직선거리로 추정되었습니다.';
+                            sourceText.style.color = 'var(--text-secondary)';
                         } else {
                             sourceText.textContent = '도보 소요시간은 직선거리로 추정되었습니다.';
                             sourceText.style.color = 'var(--text-secondary)';
