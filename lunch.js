@@ -348,12 +348,29 @@ function initRegister() {
         });
     });
 
-    // 태그 입력
+    // 태그 입력 (IME 안전 처리)
     const tagInput = document.getElementById('tag-input');
     if (tagInput) {
-        // keydown 이벤트만 처리 (keypress는 처리하지 않음)
+        let isComposing = false; // 한글 입력 조합 상태 추적
+        
+        // 한글 입력 조합 시작
+        tagInput.addEventListener('compositionstart', () => {
+            isComposing = true;
+        });
+        
+        // 한글 입력 조합 완료
+        tagInput.addEventListener('compositionend', () => {
+            isComposing = false;
+        });
+        
+        // keydown 이벤트 처리 (IME 조합 중에는 처리하지 않음)
         tagInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { 
+            if (e.key === 'Enter') {
+                // IME 조합 중이면 무시
+                if (e.isComposing || isComposing) {
+                    return;
+                }
+                
                 e.preventDefault(); 
                 e.stopPropagation(); 
                 e.stopImmediatePropagation(); // 같은 요소의 다른 리스너도 차단

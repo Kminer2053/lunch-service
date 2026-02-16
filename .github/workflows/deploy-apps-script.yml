@@ -49,6 +49,7 @@ jobs:
       - name: Apps Script 배포
         env:
           CLASP_SCRIPT_ID: ${{ secrets.CLASP_SCRIPT_ID }}
+          CLASP_DEPLOYMENT_ID: ${{ secrets.CLASP_DEPLOYMENT_ID }}
         run: |
           if [ -z "$CLASP_SCRIPT_ID" ]; then
             echo "❌ 오류: CLASP_SCRIPT_ID Secret이 설정되지 않았습니다."
@@ -69,6 +70,33 @@ jobs:
           
           echo "📤 Apps Script에 코드 푸시 중..."
           clasp push --force
+          
+          echo "📦 새 버전 생성 중..."
+          VERSION_DESCRIPTION="Auto-deploy $(date +'%Y-%m-%d %H:%M:%S')"
+          clasp version "$VERSION_DESCRIPTION"
+          
+          echo "🚀 웹 앱 배포 중..."
+          if [ -z "$CLASP_DEPLOYMENT_ID" ]; then
+            echo "⚠️ CLASP_DEPLOYMENT_ID가 설정되지 않았습니다. 새 배포를 생성합니다."
+            DEPLOYMENT_OUTPUT=$(clasp deploy --description "$VERSION_DESCRIPTION" 2>&1)
+            echo "$DEPLOYMENT_OUTPUT"
+            # 배포 ID 추출 (선택적)
+            DEPLOYMENT_ID=$(echo "$DEPLOYMENT_OUTPUT" | grep -oP 'Deployment ID: \K[^\s]+' || echo "")
+            if [ -n "$DEPLOYMENT_ID" ]; then
+              echo "📋 새 Deployment ID: $DEPLOYMENT_ID"
+              echo "💡 이 ID를 GitHub Secrets의 CLASP_DEPLOYMENT_ID에 저장하면 다음 배포부터 자동 업데이트됩니다."
+            fi
+          else
+            echo "🔄 기존 배포 업데이트 중 (Deployment ID: ${CLASP_DEPLOYMENT_ID:0:10}...)"
+            DEPLOYMENT_OUTPUT=$(clasp deploy --deploymentId "$CLASP_DEPLOYMENT_ID" --description "$VERSION_DESCRIPTION" 2>&1)
+            echo "$DEPLOYMENT_OUTPUT"
+            # 배포 URL 추출
+            DEPLOYMENT_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oP 'https://script\.google\.com/macros/s/[^\s]+' | head -1 || echo "")
+            if [ -n "$DEPLOYMENT_URL" ]; then
+              echo "✅ 배포 URL: $DEPLOYMENT_URL"
+              echo "💡 Render의 GOOGLE_APPS_SCRIPT_URL 환경변수가 이 URL과 일치하는지 확인하세요."
+            fi
+          fi
           
           echo "✅ 배포 완료!"
       
