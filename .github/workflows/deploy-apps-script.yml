@@ -81,23 +81,38 @@ jobs:
             echo "⚠️ CLASP_DEPLOYMENT_ID가 설정되지 않았습니다. 새 배포를 생성합니다."
             DEPLOYMENT_OUTPUT=$(clasp deploy --description "$VERSION_DESCRIPTION" 2>&1)
             echo "$DEPLOYMENT_OUTPUT"
-            # 배포 ID 추출 (선택적)
-            DEPLOYMENT_ID=$(echo "$DEPLOYMENT_OUTPUT" | grep -oP 'Deployment ID: \K[^\s]+' || echo "")
+            
+            # 배포 ID 추출
+            DEPLOYMENT_ID=$(echo "$DEPLOYMENT_OUTPUT" | grep -oP 'Deployed \K[^\s]+' | head -1 || echo "")
             if [ -n "$DEPLOYMENT_ID" ]; then
               echo "📋 새 Deployment ID: $DEPLOYMENT_ID"
               echo "💡 이 ID를 GitHub Secrets의 CLASP_DEPLOYMENT_ID에 저장하면 다음 배포부터 자동 업데이트됩니다."
+              
+              # 배포 URL 구성 (스크립트 ID와 배포 ID 사용)
+              DEPLOYMENT_URL="https://script.google.com/macros/s/$CLASP_SCRIPT_ID/exec"
+              echo "✅ 배포 URL: $DEPLOYMENT_URL"
+              echo "💡 Render의 GOOGLE_APPS_SCRIPT_URL 환경변수가 이 URL과 일치하는지 확인하세요."
+            else
+              # 배포 ID를 찾지 못한 경우에도 URL 구성 시도
+              DEPLOYMENT_URL="https://script.google.com/macros/s/$CLASP_SCRIPT_ID/exec"
+              echo "⚠️ 배포 ID를 추출하지 못했지만, 기본 배포 URL: $DEPLOYMENT_URL"
+              echo "💡 Render의 GOOGLE_APPS_SCRIPT_URL 환경변수가 이 URL과 일치하는지 확인하세요."
             fi
           else
             echo "🔄 기존 배포 업데이트 중 (Deployment ID: ${CLASP_DEPLOYMENT_ID:0:10}...)"
             DEPLOYMENT_OUTPUT=$(clasp deploy --deploymentId "$CLASP_DEPLOYMENT_ID" --description "$VERSION_DESCRIPTION" 2>&1)
             echo "$DEPLOYMENT_OUTPUT"
-            # 배포 URL 추출
-            DEPLOYMENT_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oP 'https://script\.google\.com/macros/s/[^\s]+' | head -1 || echo "")
-            if [ -n "$DEPLOYMENT_URL" ]; then
-              echo "✅ 배포 URL: $DEPLOYMENT_URL"
-              echo "💡 Render의 GOOGLE_APPS_SCRIPT_URL 환경변수가 이 URL과 일치하는지 확인하세요."
-            fi
+            
+            # 배포 URL 구성
+            DEPLOYMENT_URL="https://script.google.com/macros/s/$CLASP_SCRIPT_ID/exec"
+            echo "✅ 배포 URL: $DEPLOYMENT_URL"
+            echo "💡 Render의 GOOGLE_APPS_SCRIPT_URL 환경변수가 이 URL과 일치하는지 확인하세요."
           fi
+          
+          # 배포 목록 확인 (디버깅용)
+          echo ""
+          echo "📋 현재 배포 목록:"
+          clasp deployments 2>&1 | head -10 || echo "배포 목록 조회 실패"
           
           echo "✅ 배포 완료!"
       
