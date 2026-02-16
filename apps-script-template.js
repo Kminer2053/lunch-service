@@ -627,7 +627,11 @@ function handleRequest(e) {
   try {
     const request = e;
     const path = request.parameter.path || '';
+    // method는 쿼리 파라미터에서 가져오되, 없으면 POST/GET으로 추정
     const method = request.parameter.method || (e.postData ? 'POST' : 'GET');
+    
+    // 디버깅을 위한 로그 (실제 배포 시에는 제거 가능)
+    console.log('Apps Script 요청:', { path: path, method: method, hasPostData: !!e.postData });
     
     // 인증 검증
     const authError = validateApiKey(request);
@@ -639,16 +643,19 @@ function handleRequest(e) {
     let result;
     
     // 라우팅
+    // 참고: Apps Script는 GET/POST만 지원하므로, PUT/DELETE는 POST로 변환되어 method 쿼리 파라미터로 전달됨
     if (path === 'places' && method === 'GET') {
       result = getPlaces();
     } else if (path === 'places' && method === 'POST') {
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = createPlace(requestData);
-    } else if (path.startsWith('places/') && method === 'PUT') {
+    } else if (path.startsWith('places/') && (method === 'PUT' || (method === 'POST' && request.parameter.method === 'PUT'))) {
+      // POST로 변환된 PUT 요청도 처리
       const placeId = path.replace('places/', '');
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = updatePlace(placeId, requestData);
-    } else if (path.startsWith('places/') && method === 'DELETE') {
+    } else if (path.startsWith('places/') && (method === 'DELETE' || (method === 'POST' && request.parameter.method === 'DELETE'))) {
+      // POST로 변환된 DELETE 요청도 처리
       const placeId = path.replace('places/', '');
       result = deletePlace(placeId);
     } else if (path === 'reviews' && method === 'POST') {
@@ -671,10 +678,12 @@ function handleRequest(e) {
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = generateDaily(requestData);
     } else {
+      // 더 구체적인 에러 메시지 제공
       result = {
         success: false,
-        error: '알 수 없는 엔드포인트'
+        error: `알 수 없는 엔드포인트: ${path} (method: ${method})`
       };
+      console.log('알 수 없는 엔드포인트:', { path: path, method: method });
     }
     
     return ContentService.createTextOutput(JSON.stringify(result))

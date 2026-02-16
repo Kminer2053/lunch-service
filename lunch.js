@@ -62,14 +62,42 @@ function activateTab(targetTab, tabButtons, tabContents) {
 // ===== 암호 모달 =====
 function showPasswordModal() {
     const modal = document.getElementById('password-modal');
+    if (!modal) {
+        console.error('[showPasswordModal] 모달 요소를 찾을 수 없습니다.');
+        showToast('모달을 표시할 수 없습니다.');
+        return;
+    }
+    
+    const passwordInput = document.getElementById('register-password-input');
+    const btnCancel = document.getElementById('btn-pw-cancel');
+    const btnConfirm = document.getElementById('btn-pw-confirm');
+    
+    if (!passwordInput || !btnCancel || !btnConfirm) {
+        console.error('[showPasswordModal] 모달 내부 요소를 찾을 수 없습니다.');
+        showToast('모달을 표시할 수 없습니다.');
+        return;
+    }
+    
+    // 모달 표시
     modal.style.display = 'flex';
-    document.getElementById('register-password-input').value = '';
-    document.getElementById('register-password-input').focus();
-
-    document.getElementById('btn-pw-cancel').onclick = () => { modal.style.display = 'none'; };
-    document.getElementById('btn-pw-confirm').onclick = () => verifyRegisterPassword();
-    document.getElementById('register-password-input').onkeydown = (e) => {
-        if (e.key === 'Enter') verifyRegisterPassword();
+    modal.style.zIndex = '9999'; // z-index 명시적 설정
+    
+    // 입력값 초기화 및 포커스
+    passwordInput.value = '';
+    setTimeout(() => {
+        passwordInput.focus();
+    }, 100);
+    
+    // 이벤트 리스너 설정
+    btnCancel.onclick = () => { 
+        modal.style.display = 'none';
+    };
+    btnConfirm.onclick = () => verifyRegisterPassword();
+    passwordInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            verifyRegisterPassword();
+        }
     };
 }
 
@@ -315,13 +343,18 @@ function initRegister() {
     });
 
     // 태그 입력
-    document.getElementById('tag-input').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { 
-            e.preventDefault(); 
-            e.stopPropagation(); // 이벤트 전파 방지
-            addTag(); 
-        }
-    });
+    const tagInput = document.getElementById('tag-input');
+    if (tagInput) {
+        // keydown 이벤트만 처리 (keypress는 처리하지 않음)
+        tagInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { 
+                e.preventDefault(); 
+                e.stopPropagation(); 
+                e.stopImmediatePropagation(); // 같은 요소의 다른 리스너도 차단
+                addTag(); 
+            }
+        }, { once: false, passive: false });
+    }
     document.getElementById('btn-add-tag').addEventListener('click', addTag);
 
     // 이미지 업로드
@@ -511,26 +544,40 @@ function updateMapPreview(lat, lng) {
 // 태그 관리
 let isAddingTag = false; // 중복 실행 방지 플래그
 function addTag() {
-    if (isAddingTag) return; // 이미 실행 중이면 무시
-    isAddingTag = true;
+    // 이미 실행 중이면 즉시 반환
+    if (isAddingTag) {
+        console.log('[addTag] 중복 실행 방지');
+        return;
+    }
     
     const input = document.getElementById('tag-input');
+    if (!input) return;
+    
     const tag = input.value.trim().replace(/^#/, '');
     
     // 입력값이 비어있거나 공백만 있으면 무시
     if (!tag || tag.length === 0) {
-        isAddingTag = false;
         return;
     }
     
     // 중복 태그 체크
-    if (!currentTags.includes(tag)) {
-        currentTags.push(tag);
-        renderTags();
+    if (currentTags.includes(tag)) {
+        input.value = '';
+        return;
     }
     
-    input.value = '';
-    isAddingTag = false;
+    isAddingTag = true;
+    
+    try {
+        currentTags.push(tag);
+        renderTags();
+        input.value = '';
+    } finally {
+        // setTimeout을 사용하여 다음 이벤트 루프에서 플래그 리셋
+        setTimeout(() => {
+            isAddingTag = false;
+        }, 100);
+    }
 }
 function removeTag(tag) {
     currentTags = currentTags.filter(t => t !== tag);
