@@ -59,17 +59,14 @@ jobs:
           # .clasp.json 생성
           echo "{\"scriptId\":\"$CLASP_SCRIPT_ID\",\"rootDir\":\".\"}" > .clasp.json
           
-          # .claspignore 파일 확인
+          # .claspignore 파일 확인 (이미 리포지토리에 포함되어 있음)
           if [ ! -f .claspignore ]; then
-            echo "⚠️ .claspignore 파일이 없습니다. 생성 중..."
-            cat > .claspignore << 'EOF'
-# Apps Script 배포 시 제외할 파일들
-browser-test.js
-browser-test-results.json
-*.md
-.git/
-node_modules/
-EOF
+            echo "⚠️ .claspignore 파일이 없습니다. 기본 파일 생성 중..."
+            echo "browser-test.js" > .claspignore
+            echo "browser-test-results.json" >> .claspignore
+            echo "*.md" >> .claspignore
+            echo ".git/" >> .claspignore
+            echo "node_modules/" >> .claspignore
           fi
           
           echo "📤 Apps Script에 코드 푸시 중..."
