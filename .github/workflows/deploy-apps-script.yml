@@ -6,6 +6,7 @@ on:
     paths:
       - 'apps-script-template.js'
       - 'appsscript.json'
+      - '.github/workflows/deploy-apps-script.yml'  # 워크플로우 파일 변경 시에도 실행
   workflow_dispatch:  # 수동 실행도 가능
 
 jobs:
