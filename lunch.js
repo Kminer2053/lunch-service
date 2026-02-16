@@ -35,10 +35,19 @@ function initTabs() {
         btn.addEventListener('click', () => {
             const targetTab = btn.getAttribute('data-tab');
 
-            if (targetTab === 'register-tab' && !registerAuthenticated) {
-                // 세션 스토리지 확인하지 않고 항상 비밀번호 모달 표시
+            // 등록 탭을 클릭할 때마다 비밀번호 모달 표시 (같은 세션에서도)
+            if (targetTab === 'register-tab') {
+                // 다른 탭으로 이동할 때 인증 상태 리셋
+                if (registerAuthenticated) {
+                    registerAuthenticated = false;
+                }
                 showPasswordModal();
                 return;
+            }
+
+            // 다른 탭으로 이동할 때 등록 인증 상태 리셋
+            if (registerAuthenticated) {
+                registerAuthenticated = false;
             }
 
             activateTab(targetTab, tabButtons, tabContents);
@@ -348,17 +357,28 @@ function initRegister() {
                 e.preventDefault(); 
                 e.stopPropagation(); 
                 e.stopImmediatePropagation(); // 같은 요소의 다른 리스너도 차단
-                // 입력값을 먼저 저장하고 즉시 비우기
+                
+                // 입력값을 먼저 저장
                 const value = tagInput.value.trim();
-                tagInput.value = ''; // 즉시 입력 필드 비우기
+                
+                // 즉시 입력 필드를 비우기 (다른 이벤트보다 먼저)
+                tagInput.value = '';
+                
+                // 입력값이 있으면 태그 추가
                 if (value) {
-                    // 입력값이 있으면 태그 추가
                     const tag = value.replace(/^#/, '');
-                    if (tag && !currentTags.includes(tag)) {
+                    if (tag && tag.length > 0 && !currentTags.includes(tag)) {
                         currentTags.push(tag);
                         renderTags();
                     }
                 }
+                
+                // 입력 필드가 비워졌는지 다시 확인
+                setTimeout(() => {
+                    if (tagInput.value.trim().length > 0) {
+                        tagInput.value = '';
+                    }
+                }, 0);
             }
         }, { once: false, passive: false });
     }

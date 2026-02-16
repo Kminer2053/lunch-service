@@ -661,11 +661,19 @@ function handleRequest(e) {
   try {
     const request = e;
     const path = request.parameter.path || '';
-    // method는 쿼리 파라미터에서 가져오되, 없으면 POST/GET으로 추정
-    const method = request.parameter.method || (e.postData ? 'POST' : 'GET');
+    // 실제 HTTP 메서드 (Apps Script는 GET/POST만 지원)
+    const httpMethod = e.postData ? 'POST' : 'GET';
+    // 원본 메서드 (쿼리 파라미터에서 가져옴, PUT/DELETE일 수 있음)
+    const originalMethod = request.parameter.method || httpMethod;
     
-    // 디버깅을 위한 로그 (실제 배포 시에는 제거 가능)
-    console.log('Apps Script 요청:', { path: path, method: method, hasPostData: !!e.postData });
+    // 디버깅을 위한 로그
+    console.log('Apps Script 요청:', { 
+      path: path, 
+      httpMethod: httpMethod, 
+      originalMethod: originalMethod,
+      hasPostData: !!e.postData,
+      parameterMethod: request.parameter.method
+    });
     
     // 인증 검증
     const authError = validateApiKey(request);
@@ -678,14 +686,10 @@ function handleRequest(e) {
     
     // 라우팅
     // 참고: Apps Script는 GET/POST만 지원하므로, PUT/DELETE는 POST로 변환되어 method 쿼리 파라미터로 전달됨
-    // 원본 메서드는 request.parameter.method에서 확인 가능
     
-    // 원본 메서드 확인 (POST로 변환된 경우)
-    const originalMethod = request.parameter.method || method;
-    
-    if (path === 'places' && method === 'GET') {
+    if (path === 'places' && httpMethod === 'GET') {
       result = getPlaces();
-    } else if (path === 'places' && method === 'POST' && originalMethod === 'POST') {
+    } else if (path === 'places' && httpMethod === 'POST' && originalMethod === 'POST') {
       // 새 장소 생성 (POST만)
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = createPlace(requestData);
@@ -693,51 +697,51 @@ function handleRequest(e) {
       // places/{id} 경로 처리
       const placeId = path.replace('places/', '');
       
-      if (originalMethod === 'PUT' || (method === 'POST' && request.parameter.method === 'PUT')) {
-        // PUT 요청 (POST로 변환됨)
+      // 원본 메서드가 PUT이면 수정
+      if (originalMethod === 'PUT') {
         const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
         result = updatePlace(placeId, requestData);
-      } else if (originalMethod === 'DELETE' || (method === 'POST' && request.parameter.method === 'DELETE')) {
-        // DELETE 요청 (POST로 변환됨)
+      } else if (originalMethod === 'DELETE') {
+        // 원본 메서드가 DELETE면 삭제
         result = deletePlace(placeId);
       } else {
         result = {
           success: false,
-          error: `places/${placeId} 경로에 대한 잘못된 메서드: ${method} (원본: ${originalMethod})`
+          error: `places/${placeId} 경로에 대한 잘못된 메서드: httpMethod=${httpMethod}, originalMethod=${originalMethod}`
         };
       }
-    } else if (path === 'reviews' && method === 'POST') {
+    } else if (path === 'reviews' && httpMethod === 'POST') {
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = createReview(requestData);
-    } else if (path === 'recommend' && method === 'POST') {
+    } else if (path === 'recommend' && httpMethod === 'POST') {
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = recommendLunch(requestData);
-    } else if (path === 'config' && method === 'GET') {
+    } else if (path === 'config' && httpMethod === 'GET') {
       result = getConfig();
-    } else if (path === 'config' && method === 'POST') {
+    } else if (path === 'config' && httpMethod === 'POST') {
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = updateConfig(requestData);
-    } else if (path === 'upload-image' && method === 'POST') {
+    } else if (path === 'upload-image' && httpMethod === 'POST') {
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = uploadImage(requestData);
-    } else if (path === 'daily-recommendations' && method === 'GET') {
+    } else if (path === 'daily-recommendations' && httpMethod === 'GET') {
       result = getDailyRecommendations();
-    } else if (path === 'generate-daily' && method === 'POST') {
+    } else if (path === 'generate-daily' && httpMethod === 'POST') {
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = generateDaily(requestData);
     } else {
       // 더 구체적인 에러 메시지 제공
       const debugInfo = {
         path: path,
-        method: method,
-        originalMethod: request.parameter.method || method,
+        httpMethod: httpMethod,
+        originalMethod: originalMethod,
         hasPostData: !!e.postData,
         pathStartsWithPlaces: path.startsWith('places/'),
         pathIsPlaces: path === 'places'
       };
       result = {
         success: false,
-        error: `알 수 없는 엔드포인트: ${path} (method: ${method}, 원본: ${debugInfo.originalMethod})`
+        error: `알 수 없는 엔드포인트: ${path} (httpMethod: ${httpMethod}, originalMethod: ${originalMethod})`
       };
       console.log('알 수 없는 엔드포인트:', debugInfo);
     }
