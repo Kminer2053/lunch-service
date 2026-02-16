@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>오늘 점심, 여기</title>
+    <link rel="stylesheet" href="lunch.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- 헤더 -->
+        <header class="header">
+            <div class="header-inner">
+                <h1 id="main-title">오늘 점심, 여기</h1>
+                <button class="header-icon-btn" id="btn-bell" aria-label="알림">
+                    <i data-lucide="bell" class="header-icon"></i>
+                </button>
+            </div>
+            <p class="header-sub">어떤 맛있는 점심을 먹어볼까요?</p>
+        </header>
+
+        <!-- 메인 콘텐츠 -->
+        <main class="main-content">
+            <!-- 추천 탭 -->
+            <div class="tab-content active" id="recommend-tab">
+                <div class="recommend-section">
+                    <div class="input-card">
+                        <label class="input-label" for="recommend-text">메뉴 또는 기분</label>
+                        <textarea 
+                            id="recommend-text" 
+                            placeholder="매큐한게 당겨요 / 가벼운 샐러드..."
+                            rows="2"
+                        ></textarea>
+                    </div>
+
+                    <div class="preset-chips">
+                        <div class="chips">
+                            <button class="chip" data-preset="solo_ok"><i data-lucide="user" class="chip-icon"></i> 혼밥</button>
+                            <button class="chip" data-preset="group_ok"><i data-lucide="users" class="chip-icon"></i> 단체</button>
+                            <button class="chip" data-preset="indoor_ok"><i data-lucide="home" class="chip-icon"></i> 실내</button>
+                            <button class="chip" data-preset="quiet"><i data-lucide="volume-x" class="chip-icon"></i> 조용한</button>
+                        </div>
+                    </div>
+
+                    <button class="btn-primary btn-full" id="recommend-btn">
+                        <i data-lucide="sparkles" class="btn-icon"></i> 추천 받기
+                    </button>
+
+                    <!-- 오늘의 추천 -->
+                    <div id="daily-section" class="daily-section" style="display:none;">
+                        <div class="section-header">
+                            <h3 class="section-title">오늘의 추천 맛집</h3>
+                            <span class="section-sub" id="daily-date"></span>
+                        </div>
+                        <div id="daily-results" class="results-container"></div>
+                    </div>
+
+                    <div id="recommend-results" class="results-container"></div>
+                </div>
+            </div>
+
+            <!-- 목록 탭 -->
+            <div class="tab-content" id="list-tab">
+                <div class="list-section">
+                    <div class="search-bar">
+                        <i data-lucide="search" class="search-icon"></i>
+                        <input 
+                            type="text" 
+                            id="search-input" 
+                            placeholder="어떤 메뉴를 드시고 싶나요?"
+                            class="search-input"
+                        >
+                    </div>
+                    <div class="category-filter">
+                        <button class="cat-chip active" data-cat="전체">전체</button>
+                        <button class="cat-chip" data-cat="한식">한식</button>
+                        <button class="cat-chip" data-cat="일식">일식</button>
+                        <button class="cat-chip" data-cat="중식">중식</button>
+                        <button class="cat-chip" data-cat="양식">양식</button>
+                        <button class="cat-chip" data-cat="카페">카페</button>
+                    </div>
+                    <div id="places-list" class="places-list"></div>
+                </div>
+            </div>
+
+            <!-- 등록 탭 -->
+            <div class="tab-content" id="register-tab">
+                <div class="register-section">
+                    <!-- Step 1: 지역 검색 -->
+                    <div id="register-step1" class="register-step">
+                        <div class="step-indicator"><span class="step-badge">STEP 1</span> 장소 검색</div>
+                        <p class="register-step-desc">식당 이름이나 주소로 검색하면 정보를 자동으로 채워드려요.</p>
+                        <div class="search-bar">
+                            <i data-lucide="search" class="search-icon"></i>
+                            <input type="text" id="place-search-input" placeholder="식당 이름 또는 주소 검색..." class="search-input">
+                        </div>
+                        <button type="button" class="btn-primary btn-full" id="btn-search-place">
+                            <i data-lucide="search" class="btn-icon"></i> 검색
+                        </button>
+                        <div id="search-results" class="search-results-list"></div>
+                        <div class="register-divider">
+                            <span>또는</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="place-naver-url">네이버 지도 URL 붙여넣기</label>
+                            <div class="input-with-icon">
+                                <input type="url" id="place-naver-url" placeholder="https://naver.me/...">
+                                <i data-lucide="clipboard" class="input-icon"></i>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-primary btn-full" id="btn-auto-fill">
+                            <i data-lucide="zap" class="btn-icon"></i> 자동 채우기
+                        </button>
+                        <p class="register-manual-link">
+                            <button type="button" id="btn-manual-entry" class="link-btn">수동 입력으로 전환하기</button>
+                        </p>
+                    </div>
+                    <!-- Step 2: 확인/수정 후 등록 -->
+                    <div id="register-step2" class="register-step" style="display: none;">
+                        <div class="step-indicator">
+                            <span class="step-badge">STEP 2</span> 상세정보 입력
+                            <button type="button" class="link-btn step-back" id="btn-back-step1">
+                                <i data-lucide="arrow-left" class="btn-icon-sm"></i> 뒤로
+                            </button>
+                        </div>
+                        <form id="place-form">
+                            <!-- 기본 정보 -->
+                            <div class="form-section-title">기본 정보</div>
+                            <div class="form-group">
+                                <label for="place-name">식당 이름 *</label>
+                                <input type="text" id="place-name" placeholder="예: 맛있는 김치찌개 본점" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="place-address">주소 *</label>
+                                <div class="input-with-icon">
+                                    <input type="text" id="place-address" placeholder="도로명 주소를 입력하세요" required>
+                                    <i data-lucide="map-pin" class="input-icon"></i>
+                                </div>
+                            </div>
+                            <input type="hidden" id="place-map-url">
+                            <input type="hidden" id="place-lat">
+                            <input type="hidden" id="place-lng">
+
+                            <!-- 카테고리 칩 -->
+                            <div class="form-group">
+                                <label>카테고리</label>
+                                <div class="chips" id="category-chips">
+                                    <button type="button" class="chip cat-select" data-value="한식">한식</button>
+                                    <button type="button" class="chip cat-select" data-value="일식">일식</button>
+                                    <button type="button" class="chip cat-select" data-value="중식">중식</button>
+                                    <button type="button" class="chip cat-select" data-value="양식">양식</button>
+                                    <button type="button" class="chip cat-select" data-value="카페">카페</button>
+                                    <button type="button" class="chip cat-select" data-value="기타">기타</button>
+                                </div>
+                                <input type="hidden" id="place-category">
+                            </div>
+
+                            <!-- 상세 정보 -->
+                            <div class="form-section-title">상세 정보</div>
+                            <div class="form-row">
+                                <div class="form-group form-half">
+                                    <label for="place-price">평균 가격대</label>
+                                    <div class="input-suffix">
+                                        <input type="number" id="place-price" placeholder="12,000" min="0">
+                                        <span class="suffix">원</span>
+                                    </div>
+                                </div>
+                                <div class="form-group form-half">
+                                    <label for="place-walk">도보 소요</label>
+                                    <div class="input-suffix">
+                                        <input type="number" id="place-walk" min="0" value="0">
+                                        <span class="suffix">분</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 특징 키워드 -->
+                            <div class="form-group">
+                                <label>특징 키워드</label>
+                                <div class="chips" id="feature-chips">
+                                    <button type="button" class="chip feat-select" data-feat="solo_ok">
+                                        <i data-lucide="user" class="chip-icon"></i> 혼밥
+                                    </button>
+                                    <button type="button" class="chip feat-select" data-feat="group_ok">
+                                        <i data-lucide="users" class="chip-icon"></i> 소그룹/단체
+                                    </button>
+                                    <button type="button" class="chip feat-select" data-feat="indoor_ok">
+                                        <i data-lucide="home" class="chip-icon"></i> 실내
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- 태그 입력 -->
+                            <div class="form-group">
+                                <label>검색 태그</label>
+                                <div class="tags-container" id="tags-container"></div>
+                                <div class="tag-input-wrap">
+                                    <input type="text" id="tag-input" placeholder="태그를 입력하고 엔터를 누르세요">
+                                    <button type="button" class="tag-add-btn" id="btn-add-tag">
+                                        <i data-lucide="plus" class="btn-icon-sm"></i>
+                                    </button>
+                                </div>
+                                <input type="hidden" id="place-tags">
+                            </div>
+
+                            <!-- 대표 이미지 -->
+                            <div class="form-group">
+                                <label>대표 이미지</label>
+                                <div class="image-upload-area" id="image-upload-area">
+                                    <div class="image-upload-placeholder" id="image-placeholder">
+                                        <i data-lucide="image-plus" class="upload-icon"></i>
+                                        <span>이미지를 선택하세요</span>
+                                    </div>
+                                    <img id="image-preview" class="image-preview" style="display:none;">
+                                    <input type="file" id="place-image" accept="image/*" style="display:none;">
+                                </div>
+                            </div>
+
+                            <!-- 지도 미리보기 -->
+                            <div class="form-group" id="map-preview-group" style="display:none;">
+                                <label>지도 미리보기</label>
+                                <div class="map-preview">
+                                    <img id="map-preview-img" class="map-preview-img" alt="지도 미리보기">
+                                    <p class="map-preview-hint">입력한 주소로 지도를 확인하세요</p>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn-primary btn-full btn-submit">
+                                <i data-lucide="check-circle" class="btn-icon"></i> 등록 완료하기
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 관리자 패널 (숨김) -->
+            <div class="tab-content" id="admin-tab">
+                <div class="admin-section">
+                    <div class="section-header">
+                        <h3 class="section-title">관리자 설정</h3>
+                        <button class="link-btn" id="btn-admin-close">
+                            <i data-lucide="x" class="btn-icon-sm"></i> 닫기
+                        </button>
+                    </div>
+
+                    <div class="admin-card">
+                        <h4><i data-lucide="lock" class="admin-icon"></i> 등록 암호 관리</h4>
+                        <div class="form-group">
+                            <label for="admin-register-pw">장소 등록 암호</label>
+                            <div class="form-row">
+                                <input type="text" id="admin-register-pw" placeholder="새 암호 입력">
+                                <button type="button" class="btn-sm" id="btn-save-register-pw">저장</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-card">
+                        <h4><i data-lucide="clock" class="admin-icon"></i> 일일 추천 스케줄</h4>
+                        <div class="form-group">
+                            <label for="admin-cron-time">Cron 표현식</label>
+                            <div class="form-row">
+                                <input type="text" id="admin-cron-time" placeholder="0 10 * * 1-5">
+                                <button type="button" class="btn-sm" id="btn-save-cron">저장</button>
+                            </div>
+                            <p class="form-hint">예: "0 10 * * 1-5" = 평일 오전 10시</p>
+                        </div>
+                        <button type="button" class="btn-primary btn-full" id="btn-generate-daily">
+                            <i data-lucide="refresh-cw" class="btn-icon"></i> 수동 추천 생성
+                        </button>
+                    </div>
+
+                    <div class="admin-card">
+                        <h4><i data-lucide="list" class="admin-icon"></i> 등록 장소 관리</h4>
+                        <div id="admin-places-list" class="admin-places-list"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 하단 탭바 -->
+        <nav class="tab-bar">
+            <button class="tab-btn active" data-tab="recommend-tab">
+                <i data-lucide="utensils" class="tab-icon-svg"></i>
+                <span class="tab-label">추천</span>
+            </button>
+            <button class="tab-btn" data-tab="list-tab">
+                <i data-lucide="layout-list" class="tab-icon-svg"></i>
+                <span class="tab-label">목록</span>
+            </button>
+            <button class="tab-btn" data-tab="register-tab">
+                <i data-lucide="plus-circle" class="tab-icon-svg"></i>
+                <span class="tab-label">등록</span>
+            </button>
+        </nav>
+
+        <!-- 암호 입력 모달 -->
+        <div id="password-modal" class="modal-overlay" style="display:none;">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <i data-lucide="lock" class="modal-icon"></i>
+                    <h3>장소 등록 암호</h3>
+                </div>
+                <p class="modal-desc">등록 기능을 사용하려면 암호를 입력하세요.</p>
+                <input type="password" id="register-password-input" placeholder="암호 입력" class="modal-input">
+                <div class="modal-actions">
+                    <button class="btn-secondary" id="btn-pw-cancel">취소</button>
+                    <button class="btn-primary" id="btn-pw-confirm">확인</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 관리자 암호 모달 -->
+        <div id="admin-modal" class="modal-overlay" style="display:none;">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <i data-lucide="shield" class="modal-icon"></i>
+                    <h3>관리자 인증</h3>
+                </div>
+                <p class="modal-desc">관리자 비밀번호를 입력하세요.</p>
+                <input type="password" id="admin-password-input" placeholder="관리자 비밀번호" class="modal-input">
+                <div class="modal-actions">
+                    <button class="btn-secondary" id="btn-admin-cancel">취소</button>
+                    <button class="btn-primary" id="btn-admin-confirm">확인</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 로딩 오버레이 -->
+        <div id="loading-overlay" class="loading-overlay" style="display: none;">
+            <div class="spinner"></div>
+            <p>처리 중...</p>
+        </div>
+
+        <!-- 토스트 메시지 -->
+        <div id="toast" class="toast"></div>
+    </div>
+
+    <script src="lunch.js"></script>
+</body>
+</html>

@@ -1,0 +1,758 @@
+// API 기본 URL 설정
+const API_BASE_URL = window.API_BASE_URL || 'https://myteamdashboard.onrender.com';
+
+// 전역 상태
+let selectedPresets = [];
+let excludedPlaces = [];
+let currentTags = [];
+let selectedCategory = '';
+let selectedFeatures = { solo_ok: false, group_ok: false, indoor_ok: false };
+let imageBase64 = '';
+let currentFilterCat = '전체';
+let registerAuthenticated = false;
+
+// 초기화
+document.addEventListener('DOMContentLoaded', () => {
+    initTabs();
+    initRecommend();
+    initList();
+    initRegister();
+    initAdmin();
+    loadPlaces();
+    loadDailyRecommendations();
+    lucide.createIcons();
+});
+
+// ===== 탭 전환 =====
+function initTabs() {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetTab = btn.getAttribute('data-tab');
+
+            if (targetTab === 'register-tab' && !registerAuthenticated) {
+                if (sessionStorage.getItem('register_auth') === 'true') {
+                    registerAuthenticated = true;
+                } else {
+                    showPasswordModal();
+                    return;
+                }
+            }
+
+            activateTab(targetTab, tabButtons, tabContents);
+        });
+    });
+}
+
+function activateTab(targetTab, tabButtons, tabContents) {
+    if (!tabButtons) tabButtons = document.querySelectorAll('.tab-btn');
+    if (!tabContents) tabContents = document.querySelectorAll('.tab-content');
+    tabButtons.forEach(b => b.classList.remove('active'));
+    tabContents.forEach(tab => tab.classList.remove('active'));
+    const targetBtn = document.querySelector(`.tab-btn[data-tab="${targetTab}"]`);
+    if (targetBtn) targetBtn.classList.add('active');
+    document.getElementById(targetTab)?.classList.add('active');
+}
+
+// ===== 암호 모달 =====
+function showPasswordModal() {
+    const modal = document.getElementById('password-modal');
+    modal.style.display = 'flex';
+    document.getElementById('register-password-input').value = '';
+    document.getElementById('register-password-input').focus();
+
+    document.getElementById('btn-pw-cancel').onclick = () => { modal.style.display = 'none'; };
+    document.getElementById('btn-pw-confirm').onclick = () => verifyRegisterPassword();
+    document.getElementById('register-password-input').onkeydown = (e) => {
+        if (e.key === 'Enter') verifyRegisterPassword();
+    };
+}
+
+async function verifyRegisterPassword() {
+    const pw = document.getElementById('register-password-input').value;
+    if (!pw) { showToast('암호를 입력하세요.'); return; }
+    showLoading(true);
+    try {
+        const res = await fetch(`${API_BASE_URL}/lunch/verify-register-password`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pw })
+        });
+        const data = await res.json();
+        if (data.success) {
+            registerAuthenticated = true;
+            sessionStorage.setItem('register_auth', 'true');
+            document.getElementById('password-modal').style.display = 'none';
+            activateTab('register-tab');
+            showToast('인증 완료');
+        } else {
+            showToast(data.error || '암호가 일치하지 않습니다.');
+        }
+    } catch (e) {
+        showToast('인증 중 오류가 발생했습니다.');
+    } finally { showLoading(false); }
+}
+
+// ===== 추천 기능 =====
+function initRecommend() {
+    const recommendBtn = document.getElementById('recommend-btn');
+    document.querySelectorAll('.preset-chips .chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            chip.classList.toggle('active');
+            const preset = chip.getAttribute('data-preset');
+            if (chip.classList.contains('active')) {
+                if (!selectedPresets.includes(preset)) selectedPresets.push(preset);
+            } else {
+                selectedPresets = selectedPresets.filter(p => p !== preset);
+            }
+        });
+    });
+    recommendBtn.addEventListener('click', async () => {
+        const text = document.getElementById('recommend-text').value.trim();
+        if (!text) { showToast('추천 요청을 입력해주세요.'); return; }
+        await requestRecommendation(text, selectedPresets, excludedPlaces);
+    });
+}
+
+async function requestRecommendation(text, preset = [], exclude = []) {
+    showLoading(true);
+    try {
+        const response = await fetch(`${API_BASE_URL}/lunch/recommend`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, preset, exclude })
+        });
+        const data = await response.json();
+        if (data.success && data.data?.length > 0) {
+            displayRecommendations(data.data, 'recommend-results');
+        } else {
+            document.getElementById('recommend-results').innerHTML =
+                '<div class="empty-state"><i data-lucide="frown"></i><div class="empty-state-text">추천 결과가 없습니다</div></div>';
+            lucide.createIcons();
+        }
+    } catch (error) {
+        console.error('추천 요청 실패:', error);
+        showToast('추천 요청 중 오류가 발생했습니다.');
+    } finally { showLoading(false); }
+}
+
+async function loadDailyRecommendations() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/lunch/daily-recommendations`);
+        const data = await res.json();
+        if (data.success && data.data && data.data.length > 0) {
+            const section = document.getElementById('daily-section');
+            section.style.display = 'block';
+            const today = new Date();
+            document.getElementById('daily-date').textContent =
+                `${today.getMonth()+1}/${today.getDate()} 추천`;
+            displayRecommendations(data.data, 'daily-results');
+        }
+    } catch (e) { /* silent */ }
+}
+
+function displayRecommendations(recommendations, containerId) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = recommendations.map((place, index) => {
+        const imgHtml = place.image_url
+            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" onerror="this.style.display='none'">`
+            : '';
+        return `
+            <div class="place-card">
+                ${imgHtml}
+                <div class="place-card-body">
+                    <div class="place-card-top">
+                        <div class="place-name">${escapeHtml(place.name || '이름 없음')}</div>
+                        <span class="place-rank">${index + 1}위</span>
+                    </div>
+                    ${place.reason ? `<div class="place-reason">"${escapeHtml(place.reason)}"</div>` : ''}
+                    <div class="place-meta">
+                        ${place.category ? `<span class="place-tag cat">${escapeHtml(place.category)}</span>` : ''}
+                        ${place.walk_min ? `<span class="place-tag walk"><i data-lucide="footprints" style="width:10px;height:10px"></i> ${place.walk_min}분</span>` : ''}
+                        ${place.price_level ? `<span class="place-tag price">${escapeHtml(place.price_level)}</span>` : ''}
+                    </div>
+                    <div class="place-info">
+                        ${place.address_text ? `<div class="place-info-item"><i data-lucide="map-pin"></i> ${escapeHtml(place.address_text)}</div>` : ''}
+                        ${place.tags ? `<div class="place-info-item"><i data-lucide="hash"></i> ${escapeHtml(place.tags)}</div>` : ''}
+                    </div>
+                    <div class="place-actions">
+                        ${place.naver_map_url ? `<button class="btn-secondary" onclick="openMap('${escapeAttr(place.naver_map_url)}')"><i data-lucide="map"></i> 지도 열기</button>` : ''}
+                        <button class="btn-secondary btn-exclude" onclick="excludePlace('${place.place_id}')"><i data-lucide="x-circle"></i> 제외</button>
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+    lucide.createIcons();
+}
+
+function openMap(url) { window.open(url, '_blank'); }
+
+function excludePlace(placeId) {
+    if (!excludedPlaces.includes(placeId)) excludedPlaces.push(placeId);
+    const text = document.getElementById('recommend-text').value.trim();
+    if (text) requestRecommendation(text, selectedPresets, excludedPlaces);
+    showToast('제외 목록에 추가되었습니다.');
+}
+
+// ===== 목록 기능 =====
+function initList() {
+    document.getElementById('search-input').addEventListener('input', (e) => filterPlaces());
+    document.querySelectorAll('.cat-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            currentFilterCat = chip.getAttribute('data-cat');
+            filterPlaces();
+        });
+    });
+}
+
+async function loadPlaces() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/lunch/places`);
+        const data = await response.json();
+        if (data.success && data.data) {
+            window.allPlaces = data.data;
+            displayPlaces(data.data);
+        }
+    } catch (error) { console.error('장소 목록 로드 실패:', error); }
+}
+
+function displayPlaces(places) {
+    const placesList = document.getElementById('places-list');
+    if (!places || places.length === 0) {
+        placesList.innerHTML = '<div class="empty-state"><i data-lucide="inbox"></i><div class="empty-state-text">등록된 장소가 없습니다</div></div>';
+        lucide.createIcons();
+        return;
+    }
+    placesList.innerHTML = places.map(place => {
+        const imgHtml = place.image_url
+            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" onerror="this.style.display='none'">`
+            : '';
+        return `
+            <div class="place-card">
+                ${imgHtml}
+                <div class="place-card-body">
+                    <div class="place-card-top">
+                        <div class="place-name">${escapeHtml(place.name || '이름 없음')}</div>
+                    </div>
+                    <div class="place-meta">
+                        ${place.category ? `<span class="place-tag cat">${escapeHtml(place.category)}</span>` : ''}
+                        ${place.walk_min ? `<span class="place-tag walk"><i data-lucide="footprints" style="width:10px;height:10px"></i> ${place.walk_min}분</span>` : ''}
+                        ${place.price_level ? `<span class="place-tag price">${escapeHtml(place.price_level)}</span>` : ''}
+                    </div>
+                    <div class="place-info">
+                        ${place.address_text ? `<div class="place-info-item"><i data-lucide="map-pin"></i> ${escapeHtml(place.address_text)}</div>` : ''}
+                        ${place.tags ? `<div class="place-info-item"><i data-lucide="hash"></i> ${escapeHtml(place.tags)}</div>` : ''}
+                    </div>
+                    <div class="place-actions">
+                        ${place.naver_map_url ? `<button class="btn-secondary" onclick="openMap('${escapeAttr(place.naver_map_url)}')"><i data-lucide="map"></i> 지도 열기</button>` : ''}
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+    lucide.createIcons();
+}
+
+function filterPlaces() {
+    if (!window.allPlaces) return;
+    const query = (document.getElementById('search-input').value || '').toLowerCase();
+    const filtered = window.allPlaces.filter(place => {
+        const matchText = !query || [place.name, place.address_text, place.category, place.tags]
+            .filter(Boolean).join(' ').toLowerCase().includes(query);
+        const matchCat = currentFilterCat === '전체' || (place.category || '').includes(currentFilterCat);
+        return matchText && matchCat;
+    });
+    displayPlaces(filtered);
+}
+
+// ===== 등록 기능 =====
+function initRegister() {
+    const form = document.getElementById('place-form');
+    document.getElementById('btn-search-place').addEventListener('click', searchPlace);
+    document.getElementById('place-search-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); searchPlace(); }
+    });
+    document.getElementById('btn-auto-fill').addEventListener('click', scrapeNaverAndFillForm);
+    document.getElementById('btn-manual-entry').addEventListener('click', () => {
+        document.getElementById('register-step1').style.display = 'none';
+        document.getElementById('register-step2').style.display = 'flex';
+        clearPlaceForm();
+    });
+    document.getElementById('btn-back-step1').addEventListener('click', () => {
+        document.getElementById('register-step2').style.display = 'none';
+        document.getElementById('register-step1').style.display = 'flex';
+    });
+    form.addEventListener('submit', async (e) => { e.preventDefault(); await submitPlace(); });
+
+    // 카테고리 칩
+    document.querySelectorAll('.cat-select').forEach(chip => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('.cat-select').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            selectedCategory = chip.getAttribute('data-value');
+            document.getElementById('place-category').value = selectedCategory;
+        });
+    });
+
+    // 특징 칩
+    document.querySelectorAll('.feat-select').forEach(chip => {
+        chip.addEventListener('click', () => {
+            chip.classList.toggle('active');
+            const feat = chip.getAttribute('data-feat');
+            selectedFeatures[feat] = chip.classList.contains('active');
+        });
+    });
+
+    // 태그 입력
+    document.getElementById('tag-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); addTag(); }
+    });
+    document.getElementById('btn-add-tag').addEventListener('click', addTag);
+
+    // 이미지 업로드
+    const imageArea = document.getElementById('image-upload-area');
+    const imageInput = document.getElementById('place-image');
+    imageArea.addEventListener('click', () => imageInput.click());
+    imageInput.addEventListener('change', handleImageSelect);
+}
+
+async function searchPlace() {
+    const query = document.getElementById('place-search-input').value.trim();
+    if (!query) { showToast('검색어를 입력하세요.'); return; }
+    showLoading(true);
+    try {
+        const res = await fetch(`${API_BASE_URL}/lunch/search-place`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+        });
+        const data = await res.json();
+        if (data.success && data.data?.length > 0) {
+            displaySearchResults(data.data);
+        } else {
+            document.getElementById('search-results').innerHTML =
+                '<p style="text-align:center;color:#999;font-size:13px;padding:12px;">검색 결과가 없습니다.</p>';
+        }
+    } catch (e) {
+        showToast('검색 중 오류가 발생했습니다.');
+    } finally { showLoading(false); }
+}
+
+function displaySearchResults(items) {
+    const container = document.getElementById('search-results');
+    container.innerHTML = items.map((item, idx) => `
+        <div class="search-result-item" data-idx="${idx}">
+            <div class="search-result-name">${escapeHtml(item.name)}</div>
+            <div class="search-result-meta">
+                ${item.category_mapped ? `<span class="search-result-cat">${escapeHtml(item.category_mapped)}</span> ` : ''}
+                ${escapeHtml(item.address_text)}
+            </div>
+        </div>
+    `).join('');
+    container.querySelectorAll('.search-result-item').forEach(el => {
+        el.addEventListener('click', () => {
+            const idx = parseInt(el.getAttribute('data-idx'));
+            selectSearchResult(items[idx]);
+        });
+    });
+}
+
+async function selectSearchResult(item) {
+    showLoading(true);
+    try {
+        // 카테고리 자동 선택
+        if (item.category_mapped) {
+            document.querySelectorAll('.cat-select').forEach(c => c.classList.remove('active'));
+            const catChip = document.querySelector(`.cat-select[data-value="${item.category_mapped}"]`);
+            if (catChip) catChip.classList.add('active');
+            selectedCategory = item.category_mapped;
+            document.getElementById('place-category').value = selectedCategory;
+        }
+
+        document.getElementById('place-name').value = item.name || '';
+        document.getElementById('place-address').value = item.address_text || '';
+
+        if (item.naver_link) {
+            document.getElementById('place-map-url').value = item.naver_link;
+        }
+
+        // 지오코딩으로 좌표/도보시간 가져오기
+        if (item.address_text) {
+            const geoRes = await fetch(`${API_BASE_URL}/lunch/geocode-address`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: item.address_text })
+            });
+            const geoData = await geoRes.json();
+            if (geoData.success && geoData.data) {
+                document.getElementById('place-walk').value = geoData.data.walk_min || 0;
+                document.getElementById('place-lat').value = geoData.data.lat || '';
+                document.getElementById('place-lng').value = geoData.data.lng || '';
+                if (!item.naver_link && geoData.data.naver_map_url) {
+                    document.getElementById('place-map-url').value = geoData.data.naver_map_url;
+                }
+                updateMapPreview(geoData.data.lat, geoData.data.lng);
+            }
+        }
+
+        document.getElementById('register-step1').style.display = 'none';
+        document.getElementById('register-step2').style.display = 'flex';
+        showToast('정보를 불러왔습니다. 확인 후 등록하세요.');
+    } catch (e) {
+        console.error('selectSearchResult error:', e);
+        showToast('정보 처리 중 오류가 발생했습니다.');
+    } finally { showLoading(false); }
+}
+
+async function scrapeNaverAndFillForm() {
+    const url = (document.getElementById('place-naver-url').value || '').trim();
+    if (!url) { showToast('네이버 지도 URL을 입력해 주세요.'); return; }
+    if (!url.includes('naver')) { showToast('네이버 지도 URL을 입력해 주세요.'); return; }
+    showLoading(true);
+    try {
+        const response = await fetch(`${API_BASE_URL}/lunch/scrape-naver`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ naverMapUrl: url })
+        });
+        const result = await response.json();
+        if (result.success && result.data) {
+            fillPlaceForm(result.data);
+            document.getElementById('register-step1').style.display = 'none';
+            document.getElementById('register-step2').style.display = 'flex';
+            showToast('정보를 불러왔습니다.');
+        } else {
+            showToast(result.error || '정보를 가져오지 못했습니다.');
+        }
+    } catch (err) {
+        showToast('연결에 실패했습니다.');
+    } finally { showLoading(false); }
+}
+
+function fillPlaceForm(data) {
+    document.getElementById('place-name').value = data.name || '';
+    document.getElementById('place-address').value = data.address_text || '';
+    document.getElementById('place-map-url').value = data.naver_map_url || '';
+    document.getElementById('place-walk').value = data.walk_min != null ? data.walk_min : 0;
+
+    if (data.category) {
+        const mapped = mapCategoryFrontend(data.category);
+        document.querySelectorAll('.cat-select').forEach(c => c.classList.remove('active'));
+        const chip = document.querySelector(`.cat-select[data-value="${mapped}"]`);
+        if (chip) chip.classList.add('active');
+        selectedCategory = mapped;
+        document.getElementById('place-category').value = mapped;
+    }
+}
+
+function mapCategoryFrontend(raw) {
+    if (!raw) return '기타';
+    const keywords = { '한식':'한식','중식':'중식','중국':'중식','일식':'일식','일본':'일식','양식':'양식','분식':'분식','카페':'카페','디저트':'카페' };
+    const top = raw.split('>')[0].replace(/<[^>]+>/g,'').trim();
+    if (keywords[top]) return keywords[top];
+    for (const [k,v] of Object.entries(keywords)) { if (raw.includes(k)) return v; }
+    return '기타';
+}
+
+function clearPlaceForm() {
+    document.getElementById('place-name').value = '';
+    document.getElementById('place-address').value = '';
+    document.getElementById('place-map-url').value = '';
+    document.getElementById('place-walk').value = 0;
+    document.getElementById('place-price').value = '';
+    document.getElementById('place-lat').value = '';
+    document.getElementById('place-lng').value = '';
+    selectedCategory = '';
+    selectedFeatures = { solo_ok: false, group_ok: false, indoor_ok: false };
+    currentTags = [];
+    imageBase64 = '';
+    document.querySelectorAll('.cat-select, .feat-select').forEach(c => c.classList.remove('active'));
+    document.getElementById('tags-container').innerHTML = '';
+    document.getElementById('place-tags').value = '';
+    document.getElementById('image-preview').style.display = 'none';
+    document.getElementById('image-placeholder').style.display = 'flex';
+    document.getElementById('map-preview-group').style.display = 'none';
+}
+
+function updateMapPreview(lat, lng) {
+    if (!lat || !lng) return;
+    const img = document.getElementById('map-preview-img');
+    img.src = `${API_BASE_URL}/lunch/static-map?lat=${lat}&lng=${lng}&w=380&h=160`;
+    document.getElementById('map-preview-group').style.display = 'block';
+}
+
+// 태그 관리
+function addTag() {
+    const input = document.getElementById('tag-input');
+    const tag = input.value.trim().replace(/^#/, '');
+    if (!tag) return;
+    if (!currentTags.includes(tag)) {
+        currentTags.push(tag);
+        renderTags();
+    }
+    input.value = '';
+}
+function removeTag(tag) {
+    currentTags = currentTags.filter(t => t !== tag);
+    renderTags();
+}
+function renderTags() {
+    const container = document.getElementById('tags-container');
+    container.innerHTML = currentTags.map(tag => `
+        <span class="tag-pill">#${escapeHtml(tag)}
+            <button type="button" onclick="removeTag('${escapeAttr(tag)}')"><i data-lucide="x"></i></button>
+        </span>`).join('');
+    document.getElementById('place-tags').value = currentTags.join(',');
+    lucide.createIcons();
+}
+
+// 이미지 처리
+function resizeImage(file, maxW = 1920, maxH = 1080, quality = 0.85) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            let { width, height } = img;
+            if (width > maxW || height > maxH) {
+                const ratio = Math.min(maxW / width, maxH / height);
+                width = Math.round(width * ratio);
+                height = Math.round(height * ratio);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', quality);
+            URL.revokeObjectURL(img.src);
+            resolve(dataUrl);
+        };
+        img.src = URL.createObjectURL(file);
+    });
+}
+
+async function handleImageSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) { showToast('이미지는 20MB 이하만 가능합니다.'); return; }
+    showLoading(true);
+    try {
+        const dataUrl = await resizeImage(file, 1920, 1080, 0.85);
+        imageBase64 = dataUrl.split(',')[1];
+        document.getElementById('image-preview').src = dataUrl;
+        document.getElementById('image-preview').style.display = 'block';
+        document.getElementById('image-placeholder').style.display = 'none';
+    } catch (err) {
+        console.error('이미지 리사이즈 실패:', err);
+        showToast('이미지 처리에 실패했습니다.');
+    } finally { showLoading(false); }
+}
+
+async function submitPlace() {
+    const formData = {
+        name: document.getElementById('place-name').value.trim(),
+        address_text: document.getElementById('place-address').value.trim(),
+        naver_map_url: document.getElementById('place-map-url').value.trim(),
+        category: selectedCategory || document.getElementById('place-category').value || '',
+        price_level: document.getElementById('place-price').value || '',
+        walk_min: parseInt(document.getElementById('place-walk').value) || 0,
+        solo_ok: selectedFeatures.solo_ok,
+        group_ok: selectedFeatures.group_ok,
+        indoor_ok: selectedFeatures.indoor_ok,
+        tags: currentTags.join(','),
+        lat: document.getElementById('place-lat').value || '',
+        lng: document.getElementById('place-lng').value || ''
+    };
+    if (!formData.name || !formData.address_text) { showToast('이름과 주소는 필수 항목입니다.'); return; }
+
+    showLoading(true);
+    try {
+        // 이미지 먼저 업로드
+        if (imageBase64) {
+            try {
+                const imgRes = await fetch(`${API_BASE_URL}/lunch/upload-image`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_base64: imageBase64, filename: `${formData.name}.jpg` })
+                });
+                const imgData = await imgRes.json();
+                if (imgData.success && imgData.data?.image_url) {
+                    formData.image_url = imgData.data.image_url;
+                }
+            } catch (e) { console.error('이미지 업로드 실패:', e); }
+        }
+
+        const response = await fetch(`${API_BASE_URL}/lunch/places`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+        });
+        const data = await response.json();
+        if (data.success) {
+            showToast('장소가 등록되었습니다!');
+            clearPlaceForm();
+            document.getElementById('register-step2').style.display = 'none';
+            document.getElementById('register-step1').style.display = 'flex';
+            document.getElementById('place-naver-url').value = '';
+            document.getElementById('place-search-input').value = '';
+            document.getElementById('search-results').innerHTML = '';
+            loadPlaces();
+            activateTab('list-tab');
+        } else {
+            showToast('등록 실패: ' + (data.error || '알 수 없는 오류'));
+        }
+    } catch (error) {
+        console.error('장소 등록 실패:', error);
+        showToast('등록 중 오류가 발생했습니다.');
+    } finally { showLoading(false); }
+}
+
+// ===== 관리자 기능 =====
+function initAdmin() {
+    // 타이틀 더블클릭으로 관리자 진입
+    document.getElementById('main-title').addEventListener('dblclick', () => {
+        const modal = document.getElementById('admin-modal');
+        modal.style.display = 'flex';
+        document.getElementById('admin-password-input').value = '';
+        document.getElementById('admin-password-input').focus();
+    });
+
+    document.getElementById('btn-admin-cancel').onclick = () => {
+        document.getElementById('admin-modal').style.display = 'none';
+    };
+    document.getElementById('btn-admin-confirm').onclick = verifyAdmin;
+    document.getElementById('admin-password-input').onkeydown = (e) => {
+        if (e.key === 'Enter') verifyAdmin();
+    };
+
+    document.getElementById('btn-admin-close').onclick = () => {
+        activateTab('recommend-tab');
+    };
+
+    document.getElementById('btn-save-register-pw').onclick = () =>
+        saveConfig('register_password', document.getElementById('admin-register-pw').value);
+    document.getElementById('btn-save-cron').onclick = () =>
+        saveConfig('cron_time', document.getElementById('admin-cron-time').value);
+    document.getElementById('btn-generate-daily').onclick = generateDailyManual;
+}
+
+async function verifyAdmin() {
+    const pw = document.getElementById('admin-password-input').value;
+    if (!pw) { showToast('비밀번호를 입력하세요.'); return; }
+    showLoading(true);
+    try {
+        const res = await fetch(`${API_BASE_URL}/lunch/admin/verify`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pw })
+        });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('admin-modal').style.display = 'none';
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById('admin-tab').classList.add('active');
+            loadAdminData();
+            showToast('관리자 인증 완료');
+        } else {
+            showToast(data.error || '비밀번호가 일치하지 않습니다.');
+        }
+    } catch (e) {
+        showToast('인증 중 오류가 발생했습니다.');
+    } finally { showLoading(false); }
+}
+
+async function loadAdminData() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/lunch/admin/config`);
+        const data = await res.json();
+        if (data.success && data.data) {
+            const configs = Array.isArray(data.data) ? data.data : [];
+            const regPw = configs.find(c => c.key === 'register_password');
+            const cron = configs.find(c => c.key === 'cron_time');
+            if (regPw) document.getElementById('admin-register-pw').value = regPw.value || '';
+            if (cron) document.getElementById('admin-cron-time').value = cron.value || '';
+        }
+    } catch (e) { /* silent */ }
+
+    // 장소 목록 로드
+    try {
+        const res = await fetch(`${API_BASE_URL}/lunch/places`);
+        const data = await res.json();
+        if (data.success && data.data) {
+            const list = document.getElementById('admin-places-list');
+            list.innerHTML = data.data.map(p => `
+                <div class="admin-place-item">
+                    <div>
+                        <div class="place-name">${escapeHtml(p.name || '')}</div>
+                        <div style="font-size:11px;color:#999;">${escapeHtml(p.category || '')} | ${escapeHtml(p.address_text || '')}</div>
+                    </div>
+                    <button class="btn-delete" onclick="deletePlace('${p.place_id}')">삭제</button>
+                </div>
+            `).join('');
+        }
+    } catch (e) { /* silent */ }
+}
+
+async function saveConfig(key, value) {
+    if (!value) { showToast('값을 입력하세요.'); return; }
+    showLoading(true);
+    try {
+        const res = await fetch(`${API_BASE_URL}/lunch/admin/config`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key, value })
+        });
+        const data = await res.json();
+        if (data.success) showToast('저장 완료');
+        else showToast('저장 실패');
+    } catch (e) { showToast('저장 중 오류'); }
+    finally { showLoading(false); }
+}
+
+async function generateDailyManual() {
+    showLoading(true);
+    try {
+        const res = await fetch(`${API_BASE_URL}/lunch/admin/generate-daily`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: '오늘의 점심 추천' })
+        });
+        const data = await res.json();
+        if (data.success) showToast('일일 추천이 생성되었습니다.');
+        else showToast('생성 실패: ' + (data.error || ''));
+    } catch (e) { showToast('생성 중 오류'); }
+    finally { showLoading(false); }
+}
+
+async function deletePlace(placeId) {
+    if (!confirm('이 장소를 삭제하시겠습니까?')) return;
+    showLoading(true);
+    try {
+        const res = await fetch(`${API_BASE_URL}/lunch/admin/places/${placeId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+            showToast('삭제 완료');
+            loadAdminData();
+            loadPlaces();
+        } else { showToast('삭제 실패'); }
+    } catch (e) { showToast('삭제 중 오류'); }
+    finally { showLoading(false); }
+}
+
+// ===== 유틸리티 =====
+function showLoading(show) { document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none'; }
+function showToast(message, duration = 3000) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), duration);
+}
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+function escapeAttr(text) {
+    return String(text).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+// 전역 함수 노출
+window.openMap = openMap;
+window.excludePlace = excludePlace;
+window.removeTag = removeTag;
+window.deletePlace = deletePlace;
