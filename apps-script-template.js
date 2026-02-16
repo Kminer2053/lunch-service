@@ -319,8 +319,13 @@ function uploadImage(requestData) {
 // POST /verify-register-password - 등록 비밀번호 검증
 function verifyRegisterPassword(requestData) {
   const password = requestData.password;
-  // 등록 비밀번호 "1234" (필요 시 ScriptProperties로 이동 가능)
-  const correctPassword = '1234'; 
+  
+  // config 시트에서 비밀번호 가져오기
+  const configs = getSheetData('config');
+  // 'register_password' 키를 가진 설정값 찾기
+  const passwordConfig = configs.find(c => c.key === 'register_password');
+  // 설정값이 없으면 빈 문자열(인증 불가)
+  const correctPassword = passwordConfig ? String(passwordConfig.value) : ''; 
   
   if (password === correctPassword) {
     return { success: true };
