@@ -59,6 +59,17 @@ jobs:
           # .clasp.json 생성
           echo "{\"scriptId\":\"$CLASP_SCRIPT_ID\",\"rootDir\":\".\"}" > .clasp.json
           
+          # .claspignore 파일 확인
+          if [ ! -f .claspignore ]; then
+            echo "⚠️ .claspignore 파일이 없습니다. 생성 중..."
+            echo "# Apps Script 배포 시 제외할 파일들
+browser-test.js
+browser-test-results.json
+*.md
+.git/
+node_modules/" > .claspignore
+          fi
+          
           echo "📤 Apps Script에 코드 푸시 중..."
           clasp push --force
           

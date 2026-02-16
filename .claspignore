@@ -1,0 +1,34 @@
+# Apps Script 배포 시 제외할 파일들
+
+# 테스트 파일
+browser-test.js
+browser-test-results.json
+
+# 문서 파일
+*.md
+README.md
+TEST_GUIDE.md
+DEPLOYMENT_CHECKLIST.md
+APPS_SCRIPT_PERMISSIONS_GUIDE.md
+AUTO_TEST_RESULTS.md
+BROWSER_TEST_SUMMARY.md
+ENV_VARIABLES_CHECK.md
+FIXES_SUMMARY.md
+FIX_APPS_SCRIPT_API.md
+GOOGLE_SETUP_CHECKLIST.md
+MANUAL_TEST_RESULTS.md
+TEST_RESULTS.md
+DEPLOYMENT_STATUS.md
+
+# Git 관련
+.git/
+.gitignore
+
+# Node.js 관련
+node_modules/
+package.json
+package-lock.json
+
+# 기타
+*.log
+.DS_Store
