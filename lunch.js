@@ -155,8 +155,8 @@ function displayRecommendations(recommendations, containerId) {
     const container = document.getElementById(containerId);
     container.innerHTML = recommendations.map((place, index) => {
         const imgHtml = place.image_url
-            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" onerror="this.style.display='none'">`
-            : '';
+            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
+            : '<div class="place-card-img-placeholder"><i data-lucide="utensils-crossed"></i></div>';
         return `
             <div class="place-card">
                 ${imgHtml}
@@ -227,8 +227,8 @@ function displayPlaces(places) {
     }
     placesList.innerHTML = places.map(place => {
         const imgHtml = place.image_url
-            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" onerror="this.style.display='none'">`
-            : '';
+            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
+            : '<div class="place-card-img-placeholder"><i data-lucide="utensils-crossed"></i></div>';
         return `
             <div class="place-card">
                 ${imgHtml}
@@ -273,7 +273,6 @@ function initRegister() {
     document.getElementById('place-search-input').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); searchPlace(); }
     });
-    document.getElementById('btn-auto-fill').addEventListener('click', scrapeNaverAndFillForm);
     document.getElementById('btn-manual-entry').addEventListener('click', () => {
         document.getElementById('register-step1').style.display = 'none';
         document.getElementById('register-step2').style.display = 'flex';
@@ -391,6 +390,22 @@ async function selectSearchResult(item) {
                     document.getElementById('place-map-url').value = geoData.data.naver_map_url;
                 }
                 updateMapPreview(geoData.data.lat, geoData.data.lng);
+                
+                // 도보시간 출처 표시
+                if (geoData.data.walk_source) {
+                    const sourceGroup = document.getElementById('walk-source-group');
+                    const sourceText = document.getElementById('walk-source-text');
+                    if (sourceGroup && sourceText) {
+                        sourceGroup.style.display = 'block';
+                        if (geoData.data.walk_source === 'google') {
+                            sourceText.textContent = '도보 소요시간은 Google Directions API로 계산되었습니다.';
+                            sourceText.style.color = 'var(--primary)';
+                        } else {
+                            sourceText.textContent = '도보 소요시간은 직선거리로 추정되었습니다.';
+                            sourceText.style.color = 'var(--text-secondary)';
+                        }
+                    }
+                }
             }
         }
 
@@ -400,30 +415,6 @@ async function selectSearchResult(item) {
     } catch (e) {
         console.error('selectSearchResult error:', e);
         showToast('정보 처리 중 오류가 발생했습니다.');
-    } finally { showLoading(false); }
-}
-
-async function scrapeNaverAndFillForm() {
-    const url = (document.getElementById('place-naver-url').value || '').trim();
-    if (!url) { showToast('네이버 지도 URL을 입력해 주세요.'); return; }
-    if (!url.includes('naver')) { showToast('네이버 지도 URL을 입력해 주세요.'); return; }
-    showLoading(true);
-    try {
-        const response = await fetch(`${API_BASE_URL}/lunch/scrape-naver`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ naverMapUrl: url })
-        });
-        const result = await response.json();
-        if (result.success && result.data) {
-            fillPlaceForm(result.data);
-            document.getElementById('register-step1').style.display = 'none';
-            document.getElementById('register-step2').style.display = 'flex';
-            showToast('정보를 불러왔습니다.');
-        } else {
-            showToast(result.error || '정보를 가져오지 못했습니다.');
-        }
-    } catch (err) {
-        showToast('연결에 실패했습니다.');
     } finally { showLoading(false); }
 }
 
@@ -470,13 +461,25 @@ function clearPlaceForm() {
     document.getElementById('image-preview').style.display = 'none';
     document.getElementById('image-placeholder').style.display = 'flex';
     document.getElementById('map-preview-group').style.display = 'none';
+    const walkSourceGroup = document.getElementById('walk-source-group');
+    if (walkSourceGroup) walkSourceGroup.style.display = 'none';
 }
 
 function updateMapPreview(lat, lng) {
     if (!lat || !lng) return;
     const img = document.getElementById('map-preview-img');
-    img.src = `${API_BASE_URL}/lunch/static-map?lat=${lat}&lng=${lng}&w=380&h=160`;
-    document.getElementById('map-preview-group').style.display = 'block';
+    const errorDiv = document.getElementById('map-preview-error');
+    if (img && errorDiv) {
+        img.style.display = 'block';
+        errorDiv.style.display = 'none';
+        img.onerror = function() {
+            this.style.display = 'none';
+            if (errorDiv) errorDiv.style.display = 'block';
+        };
+        img.src = `${API_BASE_URL}/lunch/static-map?lat=${lat}&lng=${lng}&w=380&h=160`;
+    }
+    const group = document.getElementById('map-preview-group');
+    if (group) group.style.display = 'block';
 }
 
 // 태그 관리
@@ -590,7 +593,6 @@ async function submitPlace() {
             clearPlaceForm();
             document.getElementById('register-step2').style.display = 'none';
             document.getElementById('register-step1').style.display = 'flex';
-            document.getElementById('place-naver-url').value = '';
             document.getElementById('place-search-input').value = '';
             document.getElementById('search-results').innerHTML = '';
             loadPlaces();
@@ -678,16 +680,144 @@ async function loadAdminData() {
         if (data.success && data.data) {
             const list = document.getElementById('admin-places-list');
             list.innerHTML = data.data.map(p => `
-                <div class="admin-place-item">
-                    <div>
-                        <div class="place-name">${escapeHtml(p.name || '')}</div>
-                        <div style="font-size:11px;color:#999;">${escapeHtml(p.category || '')} | ${escapeHtml(p.address_text || '')}</div>
+                <div class="admin-place-item" id="place-item-${p.place_id}">
+                    <div class="admin-place-view">
+                        <div>
+                            <div class="place-name">${escapeHtml(p.name || '')}</div>
+                            <div style="font-size:11px;color:#999;">${escapeHtml(p.category || '')} | ${escapeHtml(p.address_text || '')}</div>
+                        </div>
+                        <div>
+                            <button class="btn-sm" onclick="editPlace('${p.place_id}')">수정</button>
+                            <button class="btn-delete" onclick="deletePlace('${p.place_id}')">삭제</button>
+                        </div>
                     </div>
-                    <button class="btn-delete" onclick="deletePlace('${p.place_id}')">삭제</button>
+                    <div class="admin-place-edit" id="place-edit-${p.place_id}" style="display:none;">
+                        <div class="form-group">
+                            <label>이름</label>
+                            <input type="text" id="edit-name-${p.place_id}" value="${escapeAttr(p.name || '')}">
+                        </div>
+                        <div class="form-group">
+                            <label>주소</label>
+                            <input type="text" id="edit-address-${p.place_id}" value="${escapeAttr(p.address_text || '')}">
+                        </div>
+                        <div class="form-group">
+                            <label>카테고리</label>
+                            <input type="text" id="edit-category-${p.place_id}" value="${escapeAttr(p.category || '')}">
+                        </div>
+                        <div class="form-group">
+                            <label>가격대</label>
+                            <input type="text" id="edit-price-${p.place_id}" value="${escapeAttr(p.price_level || '')}">
+                        </div>
+                        <div class="form-group">
+                            <label>도보시간 (분)</label>
+                            <input type="number" id="edit-walk-${p.place_id}" value="${p.walk_min || 0}">
+                        </div>
+                        <div class="form-group">
+                            <label>키워드</label>
+                            <input type="text" id="edit-keywords-${p.place_id}" value="${escapeAttr(p.keywords || '')}">
+                        </div>
+                        <div class="form-group">
+                            <label>태그</label>
+                            <input type="text" id="edit-tags-${p.place_id}" value="${escapeAttr(p.tags || '')}">
+                        </div>
+                        <div class="form-group">
+                            <label>이미지 URL</label>
+                            <input type="text" id="edit-image-${p.place_id}" value="${escapeAttr(p.image_url || '')}">
+                        </div>
+                        <div class="form-group">
+                            <label>네이버 지도 URL</label>
+                            <input type="text" id="edit-naver-${p.place_id}" value="${escapeAttr(p.naver_map_url || '')}">
+                        </div>
+                        <div class="form-group">
+                            <label>위도</label>
+                            <input type="number" step="any" id="edit-lat-${p.place_id}" value="${p.lat || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>경도</label>
+                            <input type="number" step="any" id="edit-lng-${p.place_id}" value="${p.lng || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="edit-solo-${p.place_id}" ${p.solo_ok ? 'checked' : ''}>
+                                혼밥 가능
+                            </label>
+                            <label>
+                                <input type="checkbox" id="edit-group-${p.place_id}" ${p.group_ok ? 'checked' : ''}>
+                                단체 가능
+                            </label>
+                            <label>
+                                <input type="checkbox" id="edit-indoor-${p.place_id}" ${p.indoor_ok ? 'checked' : ''}>
+                                실내 가능
+                            </label>
+                        </div>
+                        <div class="form-row">
+                            <button class="btn-primary" onclick="savePlace('${p.place_id}')">저장</button>
+                            <button class="btn-secondary" onclick="cancelEditPlace('${p.place_id}')">취소</button>
+                        </div>
+                    </div>
                 </div>
             `).join('');
         }
     } catch (e) { /* silent */ }
+}
+
+function editPlace(placeId) {
+    const viewDiv = document.querySelector(`#place-item-${placeId} .admin-place-view`);
+    const editDiv = document.getElementById(`place-edit-${placeId}`);
+    if (viewDiv && editDiv) {
+        viewDiv.style.display = 'none';
+        editDiv.style.display = 'block';
+    }
+}
+
+function cancelEditPlace(placeId) {
+    const viewDiv = document.querySelector(`#place-item-${placeId} .admin-place-view`);
+    const editDiv = document.getElementById(`place-edit-${placeId}`);
+    if (viewDiv && editDiv) {
+        viewDiv.style.display = 'flex';
+        editDiv.style.display = 'none';
+    }
+}
+
+async function savePlace(placeId) {
+    showLoading(true);
+    try {
+        const data = {
+            name: document.getElementById(`edit-name-${placeId}`).value,
+            address_text: document.getElementById(`edit-address-${placeId}`).value,
+            category: document.getElementById(`edit-category-${placeId}`).value,
+            price_level: document.getElementById(`edit-price-${placeId}`).value,
+            walk_min: parseInt(document.getElementById(`edit-walk-${placeId}`).value) || 0,
+            keywords: document.getElementById(`edit-keywords-${placeId}`).value,
+            tags: document.getElementById(`edit-tags-${placeId}`).value,
+            image_url: document.getElementById(`edit-image-${placeId}`).value,
+            naver_map_url: document.getElementById(`edit-naver-${placeId}`).value,
+            lat: parseFloat(document.getElementById(`edit-lat-${placeId}`).value) || null,
+            lng: parseFloat(document.getElementById(`edit-lng-${placeId}`).value) || null,
+            solo_ok: document.getElementById(`edit-solo-${placeId}`).checked,
+            group_ok: document.getElementById(`edit-group-${placeId}`).checked,
+            indoor_ok: document.getElementById(`edit-indoor-${placeId}`).checked
+        };
+        
+        const res = await fetch(`${API_BASE_URL}/lunch/admin/places/${placeId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await res.json();
+        if (result.success) {
+            showToast('수정 완료');
+            loadAdminData();
+            loadPlaces();
+        } else {
+            showToast(result.error || '수정 실패');
+        }
+    } catch (e) {
+        showToast('수정 중 오류');
+    } finally {
+        showLoading(false);
+    }
 }
 
 async function saveConfig(key, value) {
@@ -756,3 +886,6 @@ window.openMap = openMap;
 window.excludePlace = excludePlace;
 window.removeTag = removeTag;
 window.deletePlace = deletePlace;
+window.editPlace = editPlace;
+window.cancelEditPlace = cancelEditPlace;
+window.savePlace = savePlace;
