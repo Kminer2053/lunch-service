@@ -250,6 +250,7 @@ function initList() {
 }
 
 async function loadPlaces() {
+    showLoading(true);
     try {
         const response = await fetch(`${API_BASE_URL}/lunch/places`);
         const data = await response.json();
@@ -258,6 +259,7 @@ async function loadPlaces() {
             displayPlaces(data.data);
         }
     } catch (error) { console.error('장소 목록 로드 실패:', error); }
+    finally { showLoading(false); }
 }
 
 function displayPlaces(places) {
@@ -863,6 +865,7 @@ async function verifyAdmin() {
 }
 
 async function loadAdminData() {
+    showLoading(true);
     try {
         const res = await fetch(`${API_BASE_URL}/lunch/admin/config`);
         const data = await res.json();
@@ -961,7 +964,7 @@ async function loadAdminData() {
                 </div>
             `).join('');
         }
-    } catch (e) { /* silent */ }
+    } catch (e) { /* silent */ } finally { showLoading(false); }
 }
 
 function editPlace(placeId) {
