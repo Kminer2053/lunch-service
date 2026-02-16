@@ -1,5 +1,10 @@
 # Apps Script 배포 시 제외할 파일들
 
+# 프론트엔드 파일 (브라우저용)
+lunch.js
+lunch.css
+index.html
+
 # 테스트 파일
 browser-test.js
 browser-test-results.json
