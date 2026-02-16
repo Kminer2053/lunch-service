@@ -197,7 +197,7 @@ function displayRecommendations(recommendations, containerId) {
     const container = document.getElementById(containerId);
     container.innerHTML = recommendations.map((place, index) => {
         const imgHtml = place.image_url
-            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
+            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" referrerpolicy="no-referrer" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
             : '<div class="place-card-img-placeholder"><i data-lucide="utensils-crossed"></i></div>';
         return `
             <div class="place-card">
@@ -269,7 +269,7 @@ function displayPlaces(places) {
     }
     placesList.innerHTML = places.map(place => {
         const imgHtml = place.image_url
-            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
+            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" referrerpolicy="no-referrer" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
             : '<div class="place-card-img-placeholder"><i data-lucide="utensils-crossed"></i></div>';
         return `
             <div class="place-card">

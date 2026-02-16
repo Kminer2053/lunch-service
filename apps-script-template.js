@@ -316,6 +316,19 @@ function uploadImage(requestData) {
   }
 }
 
+// POST /verify-register-password - 등록 비밀번호 검증
+function verifyRegisterPassword(requestData) {
+  const password = requestData.password;
+  // 등록 비밀번호 "1234" (필요 시 ScriptProperties로 이동 가능)
+  const correctPassword = '1234'; 
+  
+  if (password === correctPassword) {
+    return { success: true };
+  } else {
+    return { success: false, error: '비밀번호가 올바르지 않습니다.' };
+  }
+}
+
 // GET /daily-recommendations - 오늘의 추천 조회
 function getDailyRecommendations() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -729,6 +742,9 @@ function handleRequest(e) {
     } else if (path === 'generate-daily' && httpMethod === 'POST') {
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = generateDaily(requestData);
+    } else if (path === 'verify-register-password' && httpMethod === 'POST') {
+      const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
+      result = verifyRegisterPassword(requestData);
     } else {
       // 더 구체적인 에러 메시지 제공
       const debugInfo = {
