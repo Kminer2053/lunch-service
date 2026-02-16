@@ -60,7 +60,7 @@
 - [ ] 환경변수 설정 확인:
   - [ ] `GOOGLE_APPS_SCRIPT_URL` 설정됨
     - **중요**: 이 값이 Apps Script 웹앱 배포 URL과 정확히 일치해야 함
-    - 형식: `https://script.google.com/macros/s/{SCRIPT_ID}/exec`
+    - 형식: `https://script.google.com/macros/s/{DEPLOYMENT_ID}/exec`
     - GitHub Actions 배포 로그에서 확인한 배포 URL과 비교
   - [ ] `LUNCH_API_KEY` 설정됨 (Apps Script의 `API_KEY`와 동일해야 함)
   - [ ] 기타 필요한 환경변수 설정됨
@@ -106,7 +106,7 @@
 
 ### Apps Script 배포 실패
 1. GitHub Actions 로그 확인
-2. `CLASP_RC` 및 `CLASP_SCRIPT_ID` 시크릿 확인
+2. `CLASP_RC`, `CLASP_SCRIPT_ID`, `CLASP_DEPLOYMENT_ID` 시크릿 확인
 3. Apps Script 편집기에서 수동으로 코드 확인
 4. **웹앱 배포 URL 불일치 문제**:
    - 증상: "알 수 없는 엔드포인트" 에러가 계속 발생

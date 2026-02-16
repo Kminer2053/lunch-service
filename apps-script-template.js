@@ -319,19 +319,32 @@ function uploadImage(requestData) {
 
 // POST /verify-register-password - 등록 비밀번호 검증
 function verifyRegisterPassword(requestData) {
-  const password = requestData.password;
+  const password = String(requestData.password || '');
   
   // config 시트에서 비밀번호 가져오기
   const configs = getSheetData('config');
   // 'register_password' 키를 가진 설정값 찾기
   const passwordConfig = configs.find(c => c.key === 'register_password');
+  
   // 설정값이 없으면 '1234'를 기본값으로 사용
-  const correctPassword = passwordConfig ? String(passwordConfig.value).trim() : '1234'; 
+  // 주의: 시트에서 숫자로 읽혀올 수 있으므로 String()으로 명시적 변환
+  const dbValue = passwordConfig ? passwordConfig.value : '1234';
+  const correctPassword = String(dbValue); 
   
   if (password === correctPassword) {
     return { success: true };
   } else {
-    return { success: false, error: '비밀번호가 올바르지 않습니다.' };
+    // 디버깅을 위해 입력값과 DB값을 비교 정보 반환 (보안상 실제 서비스에서는 주의 필요)
+    return { 
+      success: false, 
+      error: '비밀번호가 올바르지 않습니다.',
+      debug: {
+        inputLength: password.length,
+        dbLength: correctPassword.length,
+        inputVal: password, // 디버깅용: 사용자가 콘솔에서 확인 가능
+        dbVal: correctPassword // 디버깅용: 실제 DB에서 읽은 값
+      }
+    };
   }
 }
 

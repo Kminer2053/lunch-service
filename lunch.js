@@ -196,8 +196,9 @@ async function loadDailyRecommendations() {
 function displayRecommendations(recommendations, containerId) {
     const container = document.getElementById(containerId);
     container.innerHTML = recommendations.map((place, index) => {
-        const imgHtml = place.image_url
-            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" referrerpolicy="no-referrer" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
+        const imageUrl = getDisplayImageUrl(place.image_url);
+        const imgHtml = imageUrl
+            ? `<img class="place-card-img" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(place.name)}" referrerpolicy="no-referrer" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
             : '<div class="place-card-img-placeholder"><i data-lucide="utensils-crossed"></i></div>';
         return `
             <div class="place-card">
@@ -270,8 +271,9 @@ function displayPlaces(places) {
         return;
     }
     placesList.innerHTML = places.map(place => {
-        const imgHtml = place.image_url
-            ? `<img class="place-card-img" src="${escapeHtml(place.image_url)}" alt="${escapeHtml(place.name)}" referrerpolicy="no-referrer" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
+        const imageUrl = getDisplayImageUrl(place.image_url);
+        const imgHtml = imageUrl
+            ? `<img class="place-card-img" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(place.name)}" referrerpolicy="no-referrer" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
             : '<div class="place-card-img-placeholder"><i data-lucide="utensils-crossed"></i></div>';
         return `
             <div class="place-card">
@@ -1027,7 +1029,7 @@ function editPlace(placeId) {
     
     // 이미지 URL이 있으면 미리보기 표시
     if (place.image_url) {
-        document.getElementById('image-preview').src = place.image_url;
+        document.getElementById('image-preview').src = getDisplayImageUrl(place.image_url);
         document.getElementById('image-preview').style.display = 'block';
         document.getElementById('image-placeholder').style.display = 'none';
         imageBase64 = ''; // 기존 이미지는 URL만 사용
@@ -1188,6 +1190,16 @@ function showToast(message, duration = 3000) {
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), duration);
 }
+// 이미지 URL 변환 (구글 드라이브 -> lh3)
+function getDisplayImageUrl(url) {
+    if (!url) return '';
+    // 구글 드라이브 uc?id= 형식인 경우 lh3 링크로 변환
+    if (url.includes('drive.google.com/uc?id=')) {
+        return url.replace('drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/');
+    }
+    return url;
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
