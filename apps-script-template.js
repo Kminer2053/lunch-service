@@ -287,7 +287,8 @@ function uploadImage(requestData) {
     // 파일 공유 설정 (링크가 있는 사람은 볼 수 있음)
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     var fileId = file.getId();
-    var imageUrl = 'https://drive.google.com/uc?id=' + fileId;
+    // 'uc?id=' 대신 'lh3.googleusercontent.com/d/' 형식 사용 (이미지 태그용)
+    var imageUrl = 'https://lh3.googleusercontent.com/d/' + fileId;
     if (placeId) {
       var ss = SpreadsheetApp.getActiveSpreadsheet();
       var sheet = ss.getSheetByName('places');
@@ -324,8 +325,8 @@ function verifyRegisterPassword(requestData) {
   const configs = getSheetData('config');
   // 'register_password' 키를 가진 설정값 찾기
   const passwordConfig = configs.find(c => c.key === 'register_password');
-  // 설정값이 없으면 빈 문자열(인증 불가)
-  const correctPassword = passwordConfig ? String(passwordConfig.value) : ''; 
+  // 설정값이 없으면 '1234'를 기본값으로 사용
+  const correctPassword = passwordConfig ? String(passwordConfig.value).trim() : '1234'; 
   
   if (password === correctPassword) {
     return { success: true };
