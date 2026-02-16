@@ -10,6 +10,9 @@ let selectedFeatures = { solo_ok: false, group_ok: false, indoor_ok: false };
 let imageBase64 = '';
 let currentFilterCat = '전체';
 let registerAuthenticated = false;
+let editMode = false;
+let editingPlaceId = null;
+let placesData = []; // 관리자 페이지에서 사용할 장소 데이터
 
 // 초기화
 document.addEventListener('DOMContentLoaded', () => {
@@ -87,9 +90,14 @@ async function verifyRegisterPassword() {
             activateTab('register-tab');
             showToast('인증 완료');
         } else {
-            showToast(data.error || '암호가 일치하지 않습니다.');
+            // 비밀번호 틀렸을 때 모달 닫고 이전 화면으로 복귀
+            document.getElementById('password-modal').style.display = 'none';
+            document.getElementById('register-password-input').value = '';
+            showToast(data.error || '올바른 비밀번호를 입력해주세요.');
         }
     } catch (e) {
+        // 에러 발생 시에도 모달 닫기
+        document.getElementById('password-modal').style.display = 'none';
         showToast('인증 중 오류가 발생했습니다.');
     } finally { showLoading(false); }
 }
@@ -281,6 +289,9 @@ function initRegister() {
     document.getElementById('btn-back-step1').addEventListener('click', () => {
         document.getElementById('register-step2').style.display = 'none';
         document.getElementById('register-step1').style.display = 'flex';
+        editMode = false;
+        editingPlaceId = null;
+        clearPlaceForm();
     });
     form.addEventListener('submit', async (e) => { e.preventDefault(); await submitPlace(); });
 
@@ -305,7 +316,11 @@ function initRegister() {
 
     // 태그 입력
     document.getElementById('tag-input').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); addTag(); }
+        if (e.key === 'Enter') { 
+            e.preventDefault(); 
+            e.stopPropagation(); // 이벤트 전파 방지
+            addTag(); 
+        }
     });
     document.getElementById('btn-add-tag').addEventListener('click', addTag);
 
@@ -455,9 +470,20 @@ function clearPlaceForm() {
     selectedFeatures = { solo_ok: false, group_ok: false, indoor_ok: false };
     currentTags = [];
     imageBase64 = '';
+    editMode = false;
+    editingPlaceId = null;
     document.querySelectorAll('.cat-select, .feat-select').forEach(c => c.classList.remove('active'));
     document.getElementById('tags-container').innerHTML = '';
     document.getElementById('place-tags').value = '';
+    document.getElementById('image-preview').style.display = 'none';
+    document.getElementById('image-placeholder').style.display = 'flex';
+    
+    // 버튼 텍스트 원래대로 복원
+    const submitBtn = document.querySelector('#place-form button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.innerHTML = '<i data-lucide="check-circle" class="btn-icon"></i> 등록 완료하기';
+        lucide.createIcons();
+    }
     document.getElementById('image-preview').style.display = 'none';
     document.getElementById('image-placeholder').style.display = 'flex';
     document.getElementById('map-preview-group').style.display = 'none';
@@ -483,15 +509,28 @@ function updateMapPreview(lat, lng) {
 }
 
 // 태그 관리
+let isAddingTag = false; // 중복 실행 방지 플래그
 function addTag() {
+    if (isAddingTag) return; // 이미 실행 중이면 무시
+    isAddingTag = true;
+    
     const input = document.getElementById('tag-input');
     const tag = input.value.trim().replace(/^#/, '');
-    if (!tag) return;
+    
+    // 입력값이 비어있거나 공백만 있으면 무시
+    if (!tag || tag.length === 0) {
+        isAddingTag = false;
+        return;
+    }
+    
+    // 중복 태그 체크
     if (!currentTags.includes(tag)) {
         currentTags.push(tag);
         renderTags();
     }
+    
     input.value = '';
+    isAddingTag = false;
 }
 function removeTag(tag) {
     currentTags = currentTags.filter(t => t !== tag);
@@ -572,33 +611,89 @@ async function submitPlace() {
         // 이미지 먼저 업로드
         if (imageBase64) {
             try {
+                const uploadPayload = { 
+                    image_base64: imageBase64, 
+                    filename: `${formData.name}.jpg` 
+                };
+                // 수정 모드일 때 placeId 전달 (Apps Script에서 직접 시트 업데이트 가능)
+                if (editMode && editingPlaceId) {
+                    uploadPayload.place_id = editingPlaceId;
+                }
                 const imgRes = await fetch(`${API_BASE_URL}/lunch/upload-image`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image_base64: imageBase64, filename: `${formData.name}.jpg` })
+                    body: JSON.stringify(uploadPayload)
                 });
-                const imgData = await imgRes.json();
-                if (imgData.success && imgData.data?.image_url) {
-                    formData.image_url = imgData.data.image_url;
+                
+                if (!imgRes.ok) {
+                    console.error('이미지 업로드 HTTP 오류:', imgRes.status, imgRes.statusText);
+                    showToast('이미지 업로드에 실패했습니다. 이미지 없이 등록됩니다.');
+                } else {
+                    const imgData = await imgRes.json();
+                    if (imgData.success && imgData.data?.image_url) {
+                        formData.image_url = imgData.data.image_url;
+                        console.log('이미지 업로드 성공:', imgData.data.image_url);
+                    } else {
+                        console.error('이미지 업로드 실패:', imgData.error || '알 수 없는 오류');
+                        showToast('이미지 업로드에 실패했습니다. 이미지 없이 등록됩니다.');
+                    }
                 }
-            } catch (e) { console.error('이미지 업로드 실패:', e); }
+            } catch (e) { 
+                console.error('이미지 업로드 네트워크 오류:', e);
+                showToast('이미지 업로드 중 오류가 발생했습니다. 이미지 없이 등록됩니다.');
+            }
         }
 
-        const response = await fetch(`${API_BASE_URL}/lunch/places`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formData)
-        });
-        const data = await response.json();
-        if (data.success) {
-            showToast('장소가 등록되었습니다!');
-            clearPlaceForm();
-            document.getElementById('register-step2').style.display = 'none';
-            document.getElementById('register-step1').style.display = 'flex';
-            document.getElementById('place-search-input').value = '';
-            document.getElementById('search-results').innerHTML = '';
-            loadPlaces();
-            activateTab('list-tab');
+        // 수정 모드인지 확인
+        if (editMode && editingPlaceId) {
+            // 수정 요청 (PUT)
+            const response = await fetch(`${API_BASE_URL}/lunch/admin/places/${editingPlaceId}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            
+            if (!response.ok) {
+                console.error('[submitPlace] HTTP 오류:', response.status, response.statusText);
+                const errorText = await response.text();
+                console.error('[submitPlace] 응답 본문:', errorText);
+                showToast(`수정 실패: HTTP ${response.status} ${response.statusText}`);
+                return;
+            }
+            
+            const data = await response.json();
+            console.log('[submitPlace] 수정 응답:', data);
+            
+            if (data.success) {
+                showToast('수정 완료');
+                clearPlaceForm();
+                document.getElementById('register-step2').style.display = 'none';
+                document.getElementById('register-step1').style.display = 'flex';
+                loadPlaces();
+                loadAdminData(); // 관리자 페이지 목록도 새로고침
+                activateTab('list-tab');
+            } else {
+                const errorMsg = data.error || '알 수 없는 오류';
+                console.error('[submitPlace] 수정 실패:', errorMsg);
+                showToast(`수정 실패: ${errorMsg}`);
+            }
         } else {
-            showToast('등록 실패: ' + (data.error || '알 수 없는 오류'));
+            // 등록 요청 (POST)
+            const response = await fetch(`${API_BASE_URL}/lunch/places`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            const data = await response.json();
+            if (data.success) {
+                showToast('장소가 등록되었습니다!');
+                clearPlaceForm();
+                document.getElementById('register-step2').style.display = 'none';
+                document.getElementById('register-step1').style.display = 'flex';
+                document.getElementById('place-search-input').value = '';
+                document.getElementById('search-results').innerHTML = '';
+                loadPlaces();
+                activateTab('list-tab');
+            } else {
+                showToast('등록 실패: ' + (data.error || '알 수 없는 오류'));
+            }
         }
     } catch (error) {
         console.error('장소 등록 실패:', error);
@@ -678,6 +773,7 @@ async function loadAdminData() {
         const res = await fetch(`${API_BASE_URL}/lunch/places`);
         const data = await res.json();
         if (data.success && data.data) {
+            placesData = data.data; // 전역 변수에 저장
             const list = document.getElementById('admin-places-list');
             list.innerHTML = data.data.map(p => `
                 <div class="admin-place-item" id="place-item-${p.place_id}">
@@ -762,11 +858,85 @@ async function loadAdminData() {
 }
 
 function editPlace(placeId) {
-    const viewDiv = document.querySelector(`#place-item-${placeId} .admin-place-view`);
-    const editDiv = document.getElementById(`place-edit-${placeId}`);
-    if (viewDiv && editDiv) {
-        viewDiv.style.display = 'none';
-        editDiv.style.display = 'block';
+    // 장소 데이터 찾기
+    const place = placesData.find(p => p.place_id === placeId);
+    if (!place) {
+        showToast('장소 정보를 찾을 수 없습니다.');
+        return;
+    }
+    
+    // 수정 모드 설정
+    editMode = true;
+    editingPlaceId = placeId;
+    
+    // 등록 탭으로 전환
+    activateTab('register-tab');
+    
+    // STEP2 화면 표시
+    document.getElementById('register-step1').style.display = 'none';
+    document.getElementById('register-step2').style.display = 'flex';
+    
+    // 폼에 데이터 채우기
+    document.getElementById('place-name').value = place.name || '';
+    document.getElementById('place-address').value = place.address_text || '';
+    document.getElementById('place-map-url').value = place.naver_map_url || '';
+    document.getElementById('place-price').value = place.price_level || '';
+    document.getElementById('place-walk').value = place.walk_min || 0;
+    document.getElementById('place-lat').value = place.lat || '';
+    document.getElementById('place-lng').value = place.lng || '';
+    
+    // 카테고리 선택
+    selectedCategory = place.category || '';
+    if (selectedCategory) {
+        document.querySelectorAll('.cat-select').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.getAttribute('data-value') === selectedCategory) {
+                btn.classList.add('active');
+            }
+        });
+        document.getElementById('place-category').value = selectedCategory;
+    }
+    
+    // 특징 키워드 선택
+    selectedFeatures = {
+        solo_ok: place.solo_ok || false,
+        group_ok: place.group_ok || false,
+        indoor_ok: place.indoor_ok || false
+    };
+    document.querySelectorAll('.feat-select').forEach(btn => {
+        const feat = btn.getAttribute('data-feat');
+        btn.classList.remove('active');
+        if (selectedFeatures[feat]) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // 태그 채우기
+    currentTags = place.tags ? place.tags.split(',').map(t => t.trim()).filter(t => t) : [];
+    renderTags();
+    
+    // 이미지 URL이 있으면 미리보기 표시
+    if (place.image_url) {
+        document.getElementById('image-preview').src = place.image_url;
+        document.getElementById('image-preview').style.display = 'block';
+        document.getElementById('image-placeholder').style.display = 'none';
+        imageBase64 = ''; // 기존 이미지는 URL만 사용
+    } else {
+        document.getElementById('image-preview').style.display = 'none';
+        document.getElementById('image-placeholder').style.display = 'flex';
+        imageBase64 = '';
+    }
+    
+    // 버튼 텍스트 변경
+    const submitBtn = document.querySelector('#place-form button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.innerHTML = '<i data-lucide="check-circle" class="btn-icon"></i> 수정 완료하기';
+        lucide.createIcons();
+    }
+    
+    // 지도 미리보기 업데이트
+    if (place.lat && place.lng) {
+        updateMapPreview(place.lat, place.lng);
     }
 }
 
@@ -799,22 +969,37 @@ async function savePlace(placeId) {
             indoor_ok: document.getElementById(`edit-indoor-${placeId}`).checked
         };
         
+        console.log('[savePlace] 수정 요청:', { placeId, data });
+        
         const res = await fetch(`${API_BASE_URL}/lunch/admin/places/${placeId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
         
+        if (!res.ok) {
+            console.error('[savePlace] HTTP 오류:', res.status, res.statusText);
+            const errorText = await res.text();
+            console.error('[savePlace] 응답 본문:', errorText);
+            showToast(`수정 실패: HTTP ${res.status} ${res.statusText}`);
+            return;
+        }
+        
         const result = await res.json();
+        console.log('[savePlace] 응답:', result);
+        
         if (result.success) {
             showToast('수정 완료');
             loadAdminData();
             loadPlaces();
         } else {
-            showToast(result.error || '수정 실패');
+            const errorMsg = result.error || '알 수 없는 오류';
+            console.error('[savePlace] 수정 실패:', errorMsg);
+            showToast(`수정 실패: ${errorMsg}`);
         }
     } catch (e) {
-        showToast('수정 중 오류');
+        console.error('[savePlace] 예외 발생:', e);
+        showToast(`수정 중 오류: ${e.message || '네트워크 오류'}`);
     } finally {
         showLoading(false);
     }
@@ -854,13 +1039,31 @@ async function deletePlace(placeId) {
     showLoading(true);
     try {
         const res = await fetch(`${API_BASE_URL}/lunch/admin/places/${placeId}`, { method: 'DELETE' });
+        
+        if (!res.ok) {
+            console.error('[deletePlace] HTTP 오류:', res.status, res.statusText);
+            const errorText = await res.text();
+            console.error('[deletePlace] 응답 본문:', errorText);
+            showToast(`삭제 실패: HTTP ${res.status} ${res.statusText}`);
+            return;
+        }
+        
         const data = await res.json();
+        console.log('[deletePlace] 응답:', data);
+        
         if (data.success) {
             showToast('삭제 완료');
             loadAdminData();
             loadPlaces();
-        } else { showToast('삭제 실패'); }
-    } catch (e) { showToast('삭제 중 오류'); }
+        } else {
+            const errorMsg = data.error || '알 수 없는 오류';
+            console.error('[deletePlace] 삭제 실패:', errorMsg);
+            showToast(`삭제 실패: ${errorMsg}`);
+        }
+    } catch (e) { 
+        console.error('[deletePlace] 예외 발생:', e);
+        showToast(`삭제 중 오류: ${e.message || '네트워크 오류'}`);
+    }
     finally { showLoading(false); }
 }
 
