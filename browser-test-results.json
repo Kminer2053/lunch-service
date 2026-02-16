@@ -1,0 +1,39 @@
+{
+  "timestamp": "2026-02-16T13:55:09.411Z",
+  "results": {
+    "test1_tagInput": {
+      "passed": false,
+      "error": "elementHandle.click: Timeout 30000ms exceeded.\nCall log:\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n      - waiting 100ms\n    57 × waiting for element to be visible, enabled and stable\n       - element is not visible\n     - retrying click action\n       - waiting 500ms\n"
+    },
+    "test2_passwordModal": {
+      "passed": true,
+      "error": null
+    },
+    "test3_passwordValidation": {
+      "passed": false,
+      "error": "모달이 닫히지 않았거나 등록 탭으로 이동함. display: flex, activeTab: recommend-tab"
+    },
+    "test4_imageUpload": {
+      "passed": false,
+      "error": null
+    },
+    "test5_adminDelete": {
+      "passed": false,
+      "error": null
+    },
+    "test6_adminEditUI": {
+      "passed": false,
+      "error": null
+    },
+    "test7_adminEditSave": {
+      "passed": false,
+      "error": null
+    },
+    "test8_imageEdit": {
+      "passed": false,
+      "error": null
+    }
+  },
+  "networkErrors": [],
+  "consoleErrors": []
+}

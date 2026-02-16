@@ -7,10 +7,44 @@
  * 3. 환경변수 설정 (스크립트 속성):
  *    - API_KEY: server.js와 공유할 x-api-key 값
  *    - PERPLEXITY_API_KEY: (선택) LLM API 키
- * 4. 배포 > 새 배포 > 유형: 웹 앱
- * 5. 실행 대상: 나, 액세스 권한: 모든 사용자
- * 6. 배포 URL을 복사하여 server.js의 GOOGLE_APPS_SCRIPT_URL에 설정
+ * 4. 권한 확인 및 부여:
+ *    - 함수 실행 시 권한 요청 팝업에서 "허용" 클릭
+ *    - Google Drive 및 Google Sheets 접근 권한 필요
+ *    - 자세한 내용은 APPS_SCRIPT_PERMISSIONS_GUIDE.md 참고
+ * 5. 배포 > 새 배포 > 유형: 웹 앱
+ * 6. 실행 대상: 나, 액세스 권한: 모든 사용자
+ * 7. 배포 URL을 복사하여 server.js의 GOOGLE_APPS_SCRIPT_URL에 설정
  */
+
+// 권한 확인 함수 (테스트용)
+function checkPermissions() {
+  var results = [];
+  
+  // Drive 권한 확인
+  try {
+    var folders = DriveApp.getFoldersByName('lunch-images');
+    results.push('✅ Google Drive 접근 권한: 정상');
+  } catch (e) {
+    results.push('❌ Google Drive 접근 권한: ' + e.toString());
+  }
+  
+  // Sheets 권한 확인
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('places');
+    if (sheet) {
+      results.push('✅ Google Sheets 접근 권한: 정상');
+    } else {
+      results.push('⚠️ Google Sheets 접근 권한: 정상 (places 시트 없음)');
+    }
+  } catch (e) {
+    results.push('❌ Google Sheets 접근 권한: ' + e.toString());
+  }
+  
+  // 결과 출력
+  Logger.log(results.join('\n'));
+  return results.join('\n');
+}
 
 // 환경변수 가져오기
 function getApiKey() {
@@ -644,20 +678,34 @@ function handleRequest(e) {
     
     // 라우팅
     // 참고: Apps Script는 GET/POST만 지원하므로, PUT/DELETE는 POST로 변환되어 method 쿼리 파라미터로 전달됨
+    // 원본 메서드는 request.parameter.method에서 확인 가능
+    
+    // 원본 메서드 확인 (POST로 변환된 경우)
+    const originalMethod = request.parameter.method || method;
+    
     if (path === 'places' && method === 'GET') {
       result = getPlaces();
-    } else if (path === 'places' && method === 'POST') {
+    } else if (path === 'places' && method === 'POST' && originalMethod === 'POST') {
+      // 새 장소 생성 (POST만)
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = createPlace(requestData);
-    } else if (path.startsWith('places/') && (method === 'PUT' || (method === 'POST' && request.parameter.method === 'PUT'))) {
-      // POST로 변환된 PUT 요청도 처리
+    } else if (path.startsWith('places/')) {
+      // places/{id} 경로 처리
       const placeId = path.replace('places/', '');
-      const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
-      result = updatePlace(placeId, requestData);
-    } else if (path.startsWith('places/') && (method === 'DELETE' || (method === 'POST' && request.parameter.method === 'DELETE'))) {
-      // POST로 변환된 DELETE 요청도 처리
-      const placeId = path.replace('places/', '');
-      result = deletePlace(placeId);
+      
+      if (originalMethod === 'PUT' || (method === 'POST' && request.parameter.method === 'PUT')) {
+        // PUT 요청 (POST로 변환됨)
+        const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
+        result = updatePlace(placeId, requestData);
+      } else if (originalMethod === 'DELETE' || (method === 'POST' && request.parameter.method === 'DELETE')) {
+        // DELETE 요청 (POST로 변환됨)
+        result = deletePlace(placeId);
+      } else {
+        result = {
+          success: false,
+          error: `places/${placeId} 경로에 대한 잘못된 메서드: ${method} (원본: ${originalMethod})`
+        };
+      }
     } else if (path === 'reviews' && method === 'POST') {
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = createReview(requestData);
@@ -679,11 +727,19 @@ function handleRequest(e) {
       result = generateDaily(requestData);
     } else {
       // 더 구체적인 에러 메시지 제공
+      const debugInfo = {
+        path: path,
+        method: method,
+        originalMethod: request.parameter.method || method,
+        hasPostData: !!e.postData,
+        pathStartsWithPlaces: path.startsWith('places/'),
+        pathIsPlaces: path === 'places'
+      };
       result = {
         success: false,
-        error: `알 수 없는 엔드포인트: ${path} (method: ${method})`
+        error: `알 수 없는 엔드포인트: ${path} (method: ${method}, 원본: ${debugInfo.originalMethod})`
       };
-      console.log('알 수 없는 엔드포인트:', { path: path, method: method });
+      console.log('알 수 없는 엔드포인트:', debugInfo);
     }
     
     return ContentService.createTextOutput(JSON.stringify(result))

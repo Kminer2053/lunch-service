@@ -36,12 +36,9 @@ function initTabs() {
             const targetTab = btn.getAttribute('data-tab');
 
             if (targetTab === 'register-tab' && !registerAuthenticated) {
-                if (sessionStorage.getItem('register_auth') === 'true') {
-                    registerAuthenticated = true;
-                } else {
-                    showPasswordModal();
-                    return;
-                }
+                // 세션 스토리지 확인하지 않고 항상 비밀번호 모달 표시
+                showPasswordModal();
+                return;
             }
 
             activateTab(targetTab, tabButtons, tabContents);
@@ -113,7 +110,7 @@ async function verifyRegisterPassword() {
         const data = await res.json();
         if (data.success) {
             registerAuthenticated = true;
-            sessionStorage.setItem('register_auth', 'true');
+            // 세션 스토리지에 저장하지 않음 (매번 입력 요구)
             document.getElementById('password-modal').style.display = 'none';
             activateTab('register-tab');
             showToast('인증 완료');
@@ -351,7 +348,17 @@ function initRegister() {
                 e.preventDefault(); 
                 e.stopPropagation(); 
                 e.stopImmediatePropagation(); // 같은 요소의 다른 리스너도 차단
-                addTag(); 
+                // 입력값을 먼저 저장하고 즉시 비우기
+                const value = tagInput.value.trim();
+                tagInput.value = ''; // 즉시 입력 필드 비우기
+                if (value) {
+                    // 입력값이 있으면 태그 추가
+                    const tag = value.replace(/^#/, '');
+                    if (tag && !currentTags.includes(tag)) {
+                        currentTags.push(tag);
+                        renderTags();
+                    }
+                }
             }
         }, { once: false, passive: false });
     }
@@ -557,6 +564,7 @@ function addTag() {
     
     // 입력값이 비어있거나 공백만 있으면 무시
     if (!tag || tag.length === 0) {
+        input.value = ''; // 빈 값이어도 입력 필드 비우기
         return;
     }
     
@@ -571,7 +579,7 @@ function addTag() {
     try {
         currentTags.push(tag);
         renderTags();
-        input.value = '';
+        input.value = ''; // 태그 추가 후 입력 필드 비우기
     } finally {
         // setTimeout을 사용하여 다음 이벤트 루프에서 플래그 리셋
         setTimeout(() => {
@@ -658,30 +666,39 @@ async function submitPlace() {
         // 이미지 먼저 업로드
         if (imageBase64) {
             try {
-                const uploadPayload = { 
+                const uploadPayload = {
                     image_base64: imageBase64, 
-                    filename: `${formData.name}.jpg` 
+                    filename: `${formData.name || 'place'}_${Date.now()}.jpg`,
+                    place_id: editMode && editingPlaceId ? editingPlaceId : ''
                 };
-                // 수정 모드일 때 placeId 전달 (Apps Script에서 직접 시트 업데이트 가능)
-                if (editMode && editingPlaceId) {
-                    uploadPayload.place_id = editingPlaceId;
-                }
+                
+                console.log('[submitPlace] 이미지 업로드 요청:', { 
+                    url: `${API_BASE_URL}/lunch/upload-image`,
+                    hasPlaceId: !!uploadPayload.place_id,
+                    placeId: uploadPayload.place_id,
+                    editMode: editMode
+                });
+                
                 const imgRes = await fetch(`${API_BASE_URL}/lunch/upload-image`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(uploadPayload)
                 });
                 
                 if (!imgRes.ok) {
-                    console.error('이미지 업로드 HTTP 오류:', imgRes.status, imgRes.statusText);
-                    showToast('이미지 업로드에 실패했습니다. 이미지 없이 등록됩니다.');
+                    console.error('[submitPlace] 이미지 업로드 HTTP 오류:', imgRes.status, imgRes.statusText);
+                    const errorText = await imgRes.text();
+                    console.error('[submitPlace] 이미지 업로드 응답 본문:', errorText);
+                    showToast(`이미지 업로드 실패: HTTP ${imgRes.status} ${imgRes.statusText}`);
                 } else {
                     const imgData = await imgRes.json();
+                    console.log('[submitPlace] 이미지 업로드 응답:', imgData);
                     if (imgData.success && imgData.data?.image_url) {
                         formData.image_url = imgData.data.image_url;
-                        console.log('이미지 업로드 성공:', imgData.data.image_url);
+                        console.log('[submitPlace] 이미지 업로드 성공:', imgData.data.image_url);
                     } else {
-                        console.error('이미지 업로드 실패:', imgData.error || '알 수 없는 오류');
-                        showToast('이미지 업로드에 실패했습니다. 이미지 없이 등록됩니다.');
+                        const errorMsg = imgData.error || '알 수 없는 오류';
+                        console.error('[submitPlace] 이미지 업로드 실패:', errorMsg);
+                        showToast(`이미지 업로드 실패: ${errorMsg}`);
                     }
                 }
             } catch (e) { 
@@ -693,6 +710,12 @@ async function submitPlace() {
         // 수정 모드인지 확인
         if (editMode && editingPlaceId) {
             // 수정 요청 (PUT)
+            console.log('[submitPlace] 수정 요청:', { 
+                url: `${API_BASE_URL}/lunch/admin/places/${editingPlaceId}`,
+                method: 'PUT',
+                placeId: editingPlaceId
+            });
+            
             const response = await fetch(`${API_BASE_URL}/lunch/admin/places/${editingPlaceId}`, {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
@@ -1085,7 +1108,10 @@ async function deletePlace(placeId) {
     if (!confirm('이 장소를 삭제하시겠습니까?')) return;
     showLoading(true);
     try {
-        const res = await fetch(`${API_BASE_URL}/lunch/admin/places/${placeId}`, { method: 'DELETE' });
+        const url = `${API_BASE_URL}/lunch/admin/places/${placeId}`;
+        console.log('[deletePlace] 삭제 요청:', { url: url, method: 'DELETE', placeId: placeId });
+        
+        const res = await fetch(url, { method: 'DELETE' });
         
         if (!res.ok) {
             console.error('[deletePlace] HTTP 오류:', res.status, res.statusText);
