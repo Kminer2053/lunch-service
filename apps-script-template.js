@@ -7,6 +7,7 @@
  * 3. 환경변수 설정 (스크립트 속성):
  *    - API_KEY: server.js와 공유할 x-api-key 값
  *    - PERPLEXITY_API_KEY: (선택) LLM API 키
+ *    - KMA_API_KEY: (선택) 기상청 동네예보 API 키 (공공데이터포털 발급)
  * 4. 권한 확인 및 부여:
  *    - 함수 실행 시 권한 요청 팝업에서 "허용" 클릭
  *    - Google Drive 및 Google Sheets 접근 권한 필요
@@ -650,28 +651,103 @@ function recommendLunch(requestData) {
   };
 }
 
-// 날씨 정보 가져오기 (서울 영등포구)
+// 좌표를 기상청 격자 좌표로 변환
+function convertToGrid(lat, lon) {
+  const RE = 6371.00877; // 지구 반경(km)
+  const GRID = 5.0; // 격자 간격(km)
+  const SLAT1 = 30.0; // 투영 위도1(degree)
+  const SLAT2 = 60.0; // 투영 위도2(degree)
+  const OLON = 126.0; // 기준점 경도(degree)
+  const OLAT = 38.0; // 기준점 위도(degree)
+  const XO = 43; // 기준점 X좌표(GRID)
+  const YO = 136; // 기준점 Y좌표(GRID)
+  
+  const DEGRAD = Math.PI / 180.0;
+  const RADDEG = 180.0 / Math.PI;
+  
+  const re = RE / GRID;
+  const slat1 = SLAT1 * DEGRAD;
+  const slat2 = SLAT2 * DEGRAD;
+  const olon = OLON * DEGRAD;
+  const olat = OLAT * DEGRAD;
+  
+  let sn = Math.tan(Math.PI * 0.25 + slat2 * 0.5) / Math.tan(Math.PI * 0.25 + slat1 * 0.5);
+  sn = Math.log(Math.cos(slat1) / Math.cos(slat2)) / Math.log(sn);
+  let sf = Math.tan(Math.PI * 0.25 + slat1 * 0.5);
+  sf = Math.pow(sf, sn) * Math.cos(slat1) / sn;
+  let ro = Math.tan(Math.PI * 0.25 + olat * 0.5);
+  ro = re * sf / Math.pow(ro, sn);
+  
+  let ra = Math.tan(Math.PI * 0.25 + (lat) * DEGRAD * 0.5);
+  ra = re * sf / Math.pow(ra, sn);
+  let theta = lon * DEGRAD - olon;
+  if (theta > Math.PI) theta -= 2.0 * Math.PI;
+  if (theta < -Math.PI) theta += 2.0 * Math.PI;
+  theta *= sn;
+  
+  const gridX = Math.floor(ra * Math.sin(theta) + XO + 0.5);
+  const gridY = Math.floor(ro - ra * Math.cos(theta) + YO + 0.5);
+  
+  return { nx: gridX, ny: gridY };
+}
+
+// 날씨 정보 가져오기 (서울 영등포구) - 기상청 동네예보 API 사용
 function getWeatherInfo() {
   try {
-    // OpenWeatherMap API 사용 (API 키가 없으면 기본 정보 반환)
-    const apiKey = PropertiesService.getScriptProperties().getProperty('OPENWEATHER_API_KEY');
+    // 공공데이터포털 기상청 API 키 (스크립트 속성에서 가져오기)
+    const apiKey = PropertiesService.getScriptProperties().getProperty('KMA_API_KEY');
     if (!apiKey) {
       return { description: '날씨 정보 없음', temp: null };
     }
     
-    // 서울 영등포구 좌표 (대략)
+    // 서울 영등포구 좌표
     const lat = 37.5264;
     const lon = 126.8962;
-    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric&lang=kr`;
+    
+    // 격자 좌표로 변환
+    const grid = convertToGrid(lat, lon);
+    
+    // 현재 시간 기준 (기상청 API는 3시간 단위로 업데이트)
+    const now = new Date();
+    const baseDate = Utilities.formatDate(now, 'Asia/Seoul', 'yyyyMMdd');
+    const baseTime = '0200'; // 02시 기준 (가장 최근 데이터)
+    
+    // 기상청 동네예보 API (공공데이터포털)
+    const url = `http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${encodeURIComponent(apiKey)}&pageNo=1&numOfRows=10&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${grid.nx}&ny=${grid.ny}`;
     
     const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
     if (response.getResponseCode() === 200) {
       const data = JSON.parse(response.getContentText());
-      return {
-        description: data.weather && data.weather[0] ? data.weather[0].description : '날씨 정보 없음',
-        temp: data.main ? Math.round(data.main.temp) : null,
-        feels_like: data.main ? Math.round(data.main.feels_like) : null
-      };
+      
+      if (data.response && data.response.body && data.response.body.items && data.response.body.items.item) {
+        const items = data.response.body.items.item;
+        let temp = null;
+        let sky = null; // 하늘상태
+        let pty = null; // 강수형태
+        
+        items.forEach(item => {
+          if (item.category === 'T1H') temp = Math.round(parseFloat(item.obsrValue)); // 기온
+          if (item.category === 'SKY') sky = item.obsrValue; // 하늘상태 (1:맑음, 3:구름많음, 4:흐림)
+          if (item.category === 'PTY') pty = item.obsrValue; // 강수형태 (0:없음, 1:비, 2:비/눈, 3:눈, 4:소나기)
+        });
+        
+        // 날씨 설명 생성
+        let description = '';
+        if (pty === '1') description = '비';
+        else if (pty === '2') description = '비/눈';
+        else if (pty === '3') description = '눈';
+        else if (pty === '4') description = '소나기';
+        else if (sky === '1') description = '맑음';
+        else if (sky === '3') description = '구름많음';
+        else if (sky === '4') description = '흐림';
+        else description = '날씨 정보 없음';
+        
+        return {
+          description: description,
+          temp: temp,
+          feels_like: null // 기상청 API에는 체감온도가 없음
+        };
+      }
     }
   } catch (error) {
     console.error('날씨 정보 가져오기 실패:', error);
