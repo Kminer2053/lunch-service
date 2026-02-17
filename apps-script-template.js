@@ -853,25 +853,34 @@ function getWeatherInfo() {
       if (data.response && data.response.body && data.response.body.items && data.response.body.items.item) {
         const items = data.response.body.items.item;
         let temp = null;
-        let sky = null; // 하늘상태
         let pty = null; // 강수형태
+        let reh = null; // 습도
         
         items.forEach(item => {
           if (item.category === 'T1H') temp = Math.round(parseFloat(item.obsrValue)); // 기온
-          if (item.category === 'SKY') sky = item.obsrValue; // 하늘상태 (1:맑음, 3:구름많음, 4:흐림)
           if (item.category === 'PTY') pty = item.obsrValue; // 강수형태 (0:없음, 1:비, 2:비/눈, 3:눈, 4:소나기)
+          if (item.category === 'REH') reh = parseFloat(item.obsrValue); // 습도
         });
         
-        // 날씨 설명 생성
+        // 날씨 설명 생성 (초단기실황에는 SKY가 없으므로 PTY와 기온으로 판단)
         let description = '';
         if (pty === '1') description = '비';
         else if (pty === '2') description = '비/눈';
         else if (pty === '3') description = '눈';
         else if (pty === '4') description = '소나기';
-        else if (sky === '1') description = '맑음';
-        else if (sky === '3') description = '구름많음';
-        else if (sky === '4') description = '흐림';
-        else description = '날씨 정보 없음';
+        else if (pty === '0') {
+          // 강수 없음 + 기온으로 날씨 판단
+          if (temp !== null) {
+            if (temp >= 25) description = '맑고 더움';
+            else if (temp >= 15) description = '맑음';
+            else if (temp >= 5) description = '맑고 쌀쌀함';
+            else description = '맑고 추움';
+          } else {
+            description = '맑음';
+          }
+        } else {
+          description = '날씨 정보 없음';
+        }
         
         return {
           description: description,
