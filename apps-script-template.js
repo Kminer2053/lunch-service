@@ -144,7 +144,7 @@ function createPlace(requestData) {
     walk_min: requestData.walk_min || 0,
     solo_ok: requestData.solo_ok || false,
     group_ok: requestData.group_ok || false,
-    indoor_ok: requestData.indoor_ok || false,
+    reservation_ok: requestData.reservation_ok || false,
     image_url: requestData.image_url || '',
     lat: requestData.lat || '',
     lng: requestData.lng || '',
@@ -180,7 +180,7 @@ function updatePlace(placeId, requestData) {
       
       // 모든 필드 업데이트
       const fields = ['name', 'address_text', 'category', 'price_level', 'walk_min', 
-                      'keywords', 'tags', 'solo_ok', 'group_ok', 'indoor_ok', 
+                      'keywords', 'tags', 'solo_ok', 'group_ok', 'reservation_ok', 
                       'image_url', 'naver_map_url', 'lat', 'lng'];
       
       fields.forEach(field => {
@@ -195,7 +195,7 @@ function updatePlace(placeId, requestData) {
         
         let value = requestData[field];
         if (value === undefined) value = '';
-        if (field === 'solo_ok' || field === 'group_ok' || field === 'indoor_ok') {
+        if (field === 'solo_ok' || field === 'group_ok' || field === 'reservation_ok') {
           value = value === true || value === 'true' || value === 'TRUE' || value === 1 || value === '1';
         }
         sheet.getRange(row, colIdx + 1).setValue(value);
@@ -505,7 +505,7 @@ function calculateScore(place, preset, reviewStats) {
   // 프리셋 매칭 점수
   if (preset.includes('solo_ok') && place.solo_ok) score += 10;
   if (preset.includes('group_ok') && place.group_ok) score += 10;
-  if (preset.includes('indoor_ok') && place.indoor_ok) score += 10;
+  if (preset.includes('reservation_ok') && place.reservation_ok) score += 10;
   
   // 리뷰 평균 점수 (0-10점)
   score += reviewStats.average * 10;
@@ -603,18 +603,23 @@ function recommendLunch(requestData) {
 function callPerplexityAPI(text, shortlist, apiKey) {
   const url = 'https://api.perplexity.ai/chat/completions';
   
-  // shortlist를 JSON 문자열로 변환 (간소화)
-  const placesSummary = shortlist.slice(0, 20).map(p => ({
-    place_id: p.place_id,
-    name: p.name,
-    category: p.category,
-    tags: p.tags,
-    walk_min: p.walk_min,
-    solo_ok: p.solo_ok,
-    group_ok: p.group_ok,
-    indoor_ok: p.indoor_ok,
-    review_average: p.reviewStats.average
-  }));
+  // shortlist를 JSON 문자열로 변환 (간소화, 필드명을 실제 의미로 변환)
+  const placesSummary = shortlist.slice(0, 20).map(p => {
+    const features = [];
+    if (p.solo_ok) features.push('혼밥가능');
+    if (p.group_ok) features.push('단체가능');
+    if (p.reservation_ok) features.push('예약가능');
+    
+    return {
+      place_id: p.place_id,
+      name: p.name,
+      category: p.category,
+      tags: p.tags,
+      walk_min: p.walk_min,
+      features: features.length > 0 ? features.join(', ') : '없음',
+      review_average: p.reviewStats.average
+    };
+  });
   
   const prompt = `다음은 점심 식당 후보 목록입니다. 사용자의 요청에 가장 적합한 Top 3를 선택하고, 각각에 대해 1문장으로 이유를 설명하세요.
 
@@ -626,7 +631,8 @@ ${JSON.stringify(placesSummary, null, 2)}
 **중요 제약사항:**
 1. 반드시 위 후보 목록의 place_id만 사용해야 합니다.
 2. 각 추천에 대해 reason 필드에 1문장으로 이유를 작성하세요.
-3. JSON 형식으로만 응답하세요.
+3. reason 작성 시 "혼밥가능", "단체가능", "예약가능" 같은 자연스러운 표현을 사용하세요. 필드명(solo_ok, group_ok 등)을 직접 사용하지 마세요.
+4. JSON 형식으로만 응답하세요.
 
 응답 형식:
 {

@@ -26,7 +26,7 @@ async function callAppsScript(path, method = 'GET', body = null) {
 let selectedPresets = [];
 let currentTags = [];
 let selectedCategory = '';
-let selectedFeatures = { solo_ok: false, group_ok: false, indoor_ok: false };
+let selectedFeatures = { solo_ok: false, group_ok: false, reservation_ok: false };
 let imageBase64 = '';
 let currentFilterCat = '전체';
 let registerAuthenticated = false;
@@ -572,7 +572,7 @@ function clearPlaceForm() {
     document.getElementById('place-lat').value = '';
     document.getElementById('place-lng').value = '';
     selectedCategory = '';
-    selectedFeatures = { solo_ok: false, group_ok: false, indoor_ok: false };
+        selectedFeatures = { solo_ok: false, group_ok: false, reservation_ok: false };
     currentTags = [];
     imageBase64 = '';
     editMode = false;
@@ -719,7 +719,7 @@ async function submitPlace() {
         walk_min: parseInt(document.getElementById('place-walk').value) || 0,
         solo_ok: selectedFeatures.solo_ok,
         group_ok: selectedFeatures.group_ok,
-        indoor_ok: selectedFeatures.indoor_ok,
+        reservation_ok: selectedFeatures.reservation_ok,
         tags: currentTags.join(','),
         lat: document.getElementById('place-lat').value || '',
         lng: document.getElementById('place-lng').value || ''
@@ -927,8 +927,8 @@ async function loadAdminData() {
                                 단체 가능
                             </label>
                             <label>
-                                <input type="checkbox" id="edit-indoor-${p.place_id}" ${p.indoor_ok ? 'checked' : ''}>
-                                실내 가능
+                                <input type="checkbox" id="edit-reservation-${p.place_id}" ${p.reservation_ok ? 'checked' : ''}>
+                                예약 가능
                             </label>
                         </div>
                         <div class="form-row">
@@ -986,7 +986,7 @@ function editPlace(placeId) {
     selectedFeatures = {
         solo_ok: place.solo_ok || false,
         group_ok: place.group_ok || false,
-        indoor_ok: place.indoor_ok || false
+        reservation_ok: place.reservation_ok || false
     };
     document.querySelectorAll('.feat-select').forEach(btn => {
         const feat = btn.getAttribute('data-feat');
@@ -1051,7 +1051,7 @@ async function savePlace(placeId) {
             lng: parseFloat(document.getElementById(`edit-lng-${placeId}`).value) || null,
             solo_ok: document.getElementById(`edit-solo-${placeId}`).checked,
             group_ok: document.getElementById(`edit-group-${placeId}`).checked,
-            indoor_ok: document.getElementById(`edit-indoor-${placeId}`).checked
+            reservation_ok: document.getElementById(`edit-reservation-${placeId}`).checked
         };
         
         console.log('[savePlace] 수정 요청:', { placeId, data });
