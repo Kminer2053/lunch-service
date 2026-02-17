@@ -33,6 +33,8 @@ DEPLOYMENT_STATUS.md
 node_modules/
 package.json
 package-lock.json
+build.js
+build.gs
 
 # 기타
 *.log

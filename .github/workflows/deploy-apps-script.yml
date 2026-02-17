@@ -64,7 +64,15 @@ jobs:
           # .claspignore 파일 확인 (리포지토리에 포함되어 있음)
           if [ -f .claspignore ]; then
             echo "✅ .claspignore 파일 확인됨"
+            echo "📋 제외된 파일 목록:"
             cat .claspignore
+            echo ""
+            echo "🔍 build.js/build.gs 제외 확인:"
+            if grep -q "build.js\|build.gs" .claspignore; then
+              echo "✅ build.js/build.gs가 제외 목록에 포함되어 있습니다."
+            else
+              echo "⚠️ build.js/build.gs가 제외 목록에 없습니다!"
+            fi
           else
             echo "⚠️ .claspignore 파일이 없습니다."
           fi
