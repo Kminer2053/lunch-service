@@ -327,6 +327,22 @@
             </div>
         </div>
 
+        <!-- 리뷰 모달 -->
+        <div id="review-modal" class="modal-overlay" style="display:none;">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <i data-lucide="message-square" class="modal-icon"></i>
+                    <h3>리뷰 - <span id="review-place-name"></span></h3>
+                </div>
+                <p class="modal-desc">코멘트를 입력해주세요.</p>
+                <textarea id="review-comment" placeholder="방문 후기를 남겨주세요" class="modal-textarea" rows="4"></textarea>
+                <div class="modal-actions">
+                    <button class="btn-secondary" onclick="cancelReview()">취소</button>
+                    <button class="btn-primary" onclick="submitReview()">등록</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 로딩 오버레이 -->
         <div id="loading-overlay" class="loading-overlay" style="display: none;">
             <div class="spinner"></div>

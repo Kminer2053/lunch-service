@@ -24,7 +24,6 @@ async function callAppsScript(path, method = 'GET', body = null) {
 
 // 전역 상태
 let selectedPresets = [];
-let excludedPlaces = [];
 let currentTags = [];
 let selectedCategory = '';
 let selectedFeatures = { solo_ok: false, group_ok: false, indoor_ok: false };
@@ -42,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initList();
     initRegister();
     initAdmin();
+    initReview();
     loadPlaces();
     loadDailyRecommendations();
     lucide.createIcons();
@@ -170,7 +170,7 @@ function initRecommend() {
     recommendBtn.addEventListener('click', async () => {
         const text = document.getElementById('recommend-text').value.trim();
         if (!text) { showToast('추천 요청을 입력해주세요.'); return; }
-        await requestRecommendation(text, selectedPresets, excludedPlaces);
+        await requestRecommendation(text, selectedPresets, []);
     });
 }
 
@@ -245,7 +245,6 @@ function displayRecommendations(recommendations, containerId) {
                     </div>
                     <div class="place-actions">
                         ${place.naver_map_url ? `<button class="btn-secondary" onclick="openMap('${escapeAttr(place.naver_map_url)}')"><i data-lucide="map"></i> 지도 열기</button>` : ''}
-                        <button class="btn-secondary btn-exclude" onclick="excludePlace('${place.place_id}')"><i data-lucide="x-circle"></i> 제외</button>
                     </div>
                 </div>
             </div>`;
@@ -255,13 +254,6 @@ function displayRecommendations(recommendations, containerId) {
 }
 
 function openMap(url) { window.open(url, '_blank'); }
-
-function excludePlace(placeId) {
-    if (!excludedPlaces.includes(placeId)) excludedPlaces.push(placeId);
-    const text = document.getElementById('recommend-text').value.trim();
-    if (text) requestRecommendation(text, selectedPresets, excludedPlaces);
-    showToast('제외 목록에 추가되었습니다.');
-}
 
 // ===== 목록 기능 =====
 function initList() {
@@ -318,6 +310,12 @@ function displayPlaces(places) {
                     </div>
                     <div class="place-actions">
                         ${place.naver_map_url ? `<button class="btn-secondary" onclick="openMap('${escapeAttr(place.naver_map_url)}')"><i data-lucide="map"></i> 지도 열기</button>` : ''}
+                        <button class="btn-review btn-review-good" onclick="openReviewModal('${place.place_id}', '${escapeAttr(place.name)}', 'good')">
+                            <i data-lucide="thumbs-up"></i> ${place.review_good || 0}
+                        </button>
+                        <button class="btn-review btn-review-bad" onclick="openReviewModal('${place.place_id}', '${escapeAttr(place.name)}', 'bad')">
+                            <i data-lucide="thumbs-down"></i> ${place.review_bad || 0}
+                        </button>
                     </div>
                 </div>
             </div>`;
@@ -1100,7 +1098,7 @@ async function generateDailyManual() {
 }
 
 async function deletePlace(placeId) {
-    if (!confirm('이 장소를 삭제하시겠습니까?')) return;
+    if (!confirm('이 장소를 삭제하면 연결된 모든 리뷰도 함께 삭제됩니다. 계속하시겠습니까?')) return;
     showLoading(true);
     try {
         const data = await callAppsScript(`places/${placeId}`, 'DELETE');
@@ -1148,11 +1146,88 @@ function escapeAttr(text) {
     return String(text).replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
+// ===== 리뷰 기능 =====
+let currentReviewPlaceId = null;
+let currentReviewVerdict = null;
+
+function initReview() {
+    const commentEl = document.getElementById('review-comment');
+    if (commentEl) {
+        commentEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                submitReview();
+            }
+        });
+    }
+}
+
+function openReviewModal(placeId, placeName, verdict) {
+    currentReviewPlaceId = placeId;
+    currentReviewVerdict = verdict;
+    const modal = document.getElementById('review-modal');
+    const placeNameEl = document.getElementById('review-place-name');
+    const commentEl = document.getElementById('review-comment');
+    
+    if (placeNameEl) placeNameEl.textContent = placeName;
+    if (commentEl) commentEl.value = '';
+    
+    modal.style.display = 'flex';
+    setTimeout(() => {
+        if (commentEl) commentEl.focus();
+    }, 100);
+}
+
+async function submitReview() {
+    const commentEl = document.getElementById('review-comment');
+    const comment = (commentEl?.value || '').trim();
+    
+    if (!comment) {
+        showToast('코멘트를 입력해주세요.');
+        return;
+    }
+    
+    if (!currentReviewPlaceId || !currentReviewVerdict) {
+        showToast('오류가 발생했습니다.');
+        return;
+    }
+    
+    showLoading(true);
+    try {
+        const data = await callAppsScript('reviews', 'POST', {
+            place_id: currentReviewPlaceId,
+            verdict: currentReviewVerdict,
+            comment: comment
+        });
+        
+        if (data.success) {
+            document.getElementById('review-modal').style.display = 'none';
+            showToast('리뷰가 등록되었습니다.');
+            loadPlaces(); // 목록 갱신하여 카운트 업데이트
+        } else {
+            showToast(data.error || '리뷰 등록에 실패했습니다.');
+        }
+    } catch (e) {
+        console.error('[submitReview] 오류:', e);
+        showToast('리뷰 등록 중 오류가 발생했습니다.');
+    } finally {
+        showLoading(false);
+    }
+}
+
+function cancelReview() {
+    document.getElementById('review-modal').style.display = 'none';
+    currentReviewPlaceId = null;
+    currentReviewVerdict = null;
+}
+
 // 전역 함수 노출
 window.openMap = openMap;
-window.excludePlace = excludePlace;
 window.removeTag = removeTag;
 window.deletePlace = deletePlace;
 window.editPlace = editPlace;
 window.cancelEditPlace = cancelEditPlace;
 window.savePlace = savePlace;
+window.openReviewModal = openReviewModal;
+window.submitReview = submitReview;
+window.cancelReview = cancelReview;

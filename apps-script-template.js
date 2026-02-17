@@ -113,9 +113,18 @@ function generateId(prefix) {
 // GET /places - 장소 목록 조회
 function getPlaces() {
   const places = getSheetData('places');
+  // 각 장소에 리뷰 카운트 추가
+  const placesWithReviews = places.map(place => {
+    const reviewStats = aggregateReviews(place.place_id);
+    return {
+      ...place,
+      review_good: reviewStats.good || 0,
+      review_bad: reviewStats.bad || 0
+    };
+  });
   return {
     success: true,
-    data: places
+    data: placesWithReviews
   };
 }
 
@@ -204,9 +213,29 @@ function updatePlace(placeId, requestData) {
   return { success: false, error: '해당 장소를 찾을 수 없습니다.' };
 }
 
-// DELETE /places/:id - 장소 삭제
+// DELETE /places/:id - 장소 삭제 (연관 리뷰도 함께 삭제)
 function deletePlace(placeId) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 1. 먼저 해당 장소의 리뷰 모두 삭제
+  const reviewsSheet = ss.getSheetByName('reviews');
+  if (reviewsSheet) {
+    const reviewsData = reviewsSheet.getDataRange().getValues();
+    if (reviewsData.length > 1) {
+      const reviewsHeaders = reviewsData[0];
+      const placeIdCol = reviewsHeaders.indexOf('place_id');
+      if (placeIdCol !== -1) {
+        // 아래에서부터 삭제 (인덱스가 밀리지 않도록)
+        for (let i = reviewsData.length - 1; i >= 1; i--) {
+          if (reviewsData[i][placeIdCol] === placeId) {
+            reviewsSheet.deleteRow(i + 1);
+          }
+        }
+      }
+    }
+  }
+  
+  // 2. 장소 삭제
   const sheet = ss.getSheetByName('places');
   if (!sheet) return { success: false, error: 'places 시트를 찾을 수 없습니다.' };
   const data = sheet.getDataRange().getValues();
@@ -409,6 +438,12 @@ function generateDaily(requestData) {
 
 // POST /reviews - 리뷰 등록
 function createReview(requestData) {
+  // 코멘트 필수 검증
+  const comment = (requestData.comment || '').toString().trim();
+  if (!comment) {
+    return { success: false, error: '코멘트를 입력해주세요.' };
+  }
+  
   const reviewId = generateId('review');
   const now = new Date().toISOString();
   
@@ -417,7 +452,7 @@ function createReview(requestData) {
     place_id: requestData.place_id || '',
     verdict: requestData.verdict || 'neutral',
     reasons: requestData.reasons || '',
-    comment: requestData.comment || '',
+    comment: comment,
     created_at: now
   };
   

@@ -165,11 +165,20 @@ body {
 .place-info { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-secondary); }
 .place-info-item { display: flex; align-items: center; gap: 6px; }
 .place-info-item svg { width: 14px; height: 14px; flex-shrink: 0; }
-.place-actions { display: flex; gap: 8px; margin-top: 10px; }
-.place-actions .btn-secondary { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 13px; }
+.place-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.place-actions .btn-secondary { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 13px; min-width: 0; }
 .place-actions .btn-secondary svg { width: 14px; height: 14px; }
-.btn-exclude { background: #fff5f5; border-color: #fcc; color: var(--danger); }
-.btn-exclude:hover { background: #ffe5e5; }
+.btn-review { 
+    display: flex; align-items: center; justify-content: center; gap: 4px; 
+    padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    border: 1.5px solid var(--border); background: white; cursor: pointer;
+    transition: all 0.2s; min-width: 60px;
+}
+.btn-review svg { width: 16px; height: 16px; }
+.btn-review-good { color: var(--success); border-color: var(--success); }
+.btn-review-good:hover { background: rgba(52, 199, 89, 0.1); }
+.btn-review-bad { color: var(--danger); border-color: var(--danger); }
+.btn-review-bad:hover { background: rgba(255, 59, 48, 0.1); }
 
 /* ===== 목록 섹션 ===== */
 .list-section { display: flex; flex-direction: column; gap: 12px; }
@@ -329,6 +338,12 @@ body {
     font-size: 16px; text-align: center; font-family: inherit; margin-bottom: 16px;
 }
 .modal-input:focus { outline: none; border-color: var(--primary); }
+.modal-textarea {
+    width: 100%; padding: 12px; border: 1.5px solid var(--border); border-radius: 12px;
+    font-size: 15px; font-family: inherit; margin-bottom: 16px; resize: vertical;
+    min-height: 100px; text-align: left;
+}
+.modal-textarea:focus { outline: none; border-color: var(--primary); }
 .modal-actions { display: flex; gap: 10px; }
 .modal-actions .btn-secondary, .modal-actions .btn-primary { flex: 1; }
 
