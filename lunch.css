@@ -41,7 +41,7 @@ body {
 .header {
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
     color: white;
-    padding: 20px 20px 16px;
+    padding: 12px 20px 10px;
     box-shadow: 0 4px 16px var(--primary-shadow);
 }
 .header-inner {
@@ -51,7 +51,7 @@ body {
     font-size: 22px; font-weight: 700; cursor: default;
     -webkit-user-select: none; user-select: none;
 }
-.header-sub { font-size: 13px; opacity: 0.85; margin-top: 4px; text-align: center; }
+.header-sub { font-size: 13px; opacity: 0.85; margin-top: 2px; text-align: center; }
 
 /* ===== 메인 콘텐츠 ===== */
 .main-content { padding: 16px; }
