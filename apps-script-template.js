@@ -562,12 +562,7 @@ function recommendLunch(requestData) {
   const preset = requestData.preset || [];
   const exclude = requestData.exclude || [];
   
-  if (!text) {
-    return {
-      success: false,
-      error: 'text 필드는 필수입니다'
-    };
-  }
+  // text는 선택사항 (없으면 일반 추천)
   
   // 1. 모든 장소 가져오기
   const places = getSheetData('places');
@@ -595,17 +590,28 @@ function recommendLunch(requestData) {
     };
   });
   
-  // 4. 점수 순으로 정렬하여 상위 50개 shortlist 생성
+  // 4. 좋아요 수 기준으로 정렬하여 상위 30개 shortlist 생성
   const shortlist = scoredPlaces
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 50);
+    .sort((a, b) => {
+      // 좋아요 수가 같으면 점수로 정렬
+      if (b.reviewStats.good !== a.reviewStats.good) {
+        return b.reviewStats.good - a.reviewStats.good;
+      }
+      return b.score - a.score;
+    })
+    .slice(0, 30);
   
-  // 5. LLM 호출 (키가 있으면)
+  // 5. 날씨 정보 가져오기
+  const weatherInfo = getWeatherInfo();
+  
+  // 6. LLM 호출 (키가 있으면)
   const perplexityKey = getPerplexityApiKey();
   
   if (perplexityKey && shortlist.length > 0) {
     try {
-      const llmResult = callPerplexityAPI(text, shortlist, perplexityKey);
+      const hasUserRequest = text && text.trim().length > 0;
+      const topCount = hasUserRequest ? 1 : 3;
+      const llmResult = callPerplexityAPI(text, shortlist, perplexityKey, weatherInfo, topCount);
       if (llmResult && llmResult.length > 0) {
         // reco_logs에 기록
         logRecommendation(text, preset, exclude, llmResult.map(r => r.place_id));
@@ -620,8 +626,10 @@ function recommendLunch(requestData) {
     }
   }
   
-  // 6. 폴백: 상위 3개 반환
-  const top3 = shortlist.slice(0, 3).map(place => ({
+  // 7. 폴백: 사용자 요청 있으면 TOP1, 없으면 TOP3 반환
+  const hasUserRequest = text && text.trim().length > 0;
+  const topCount = hasUserRequest ? 1 : 3;
+  const topResults = shortlist.slice(0, topCount).map(place => ({
     place_id: place.place_id,
     name: place.name,
     address_text: place.address_text,
@@ -634,20 +642,50 @@ function recommendLunch(requestData) {
   }));
   
   // reco_logs에 기록
-  logRecommendation(text, preset, exclude, top3.map(p => p.place_id));
+  logRecommendation(text, preset, exclude, topResults.map(p => p.place_id));
   
   return {
     success: true,
-    data: top3
+    data: topResults
   };
 }
 
+// 날씨 정보 가져오기 (서울 영등포구)
+function getWeatherInfo() {
+  try {
+    // OpenWeatherMap API 사용 (API 키가 없으면 기본 정보 반환)
+    const apiKey = PropertiesService.getScriptProperties().getProperty('OPENWEATHER_API_KEY');
+    if (!apiKey) {
+      return { description: '날씨 정보 없음', temp: null };
+    }
+    
+    // 서울 영등포구 좌표 (대략)
+    const lat = 37.5264;
+    const lon = 126.8962;
+    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric&lang=kr`;
+    
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (response.getResponseCode() === 200) {
+      const data = JSON.parse(response.getContentText());
+      return {
+        description: data.weather && data.weather[0] ? data.weather[0].description : '날씨 정보 없음',
+        temp: data.main ? Math.round(data.main.temp) : null,
+        feels_like: data.main ? Math.round(data.main.feels_like) : null
+      };
+    }
+  } catch (error) {
+    console.error('날씨 정보 가져오기 실패:', error);
+  }
+  
+  return { description: '날씨 정보 없음', temp: null };
+}
+
 // Perplexity API 호출
-function callPerplexityAPI(text, shortlist, apiKey) {
+function callPerplexityAPI(text, shortlist, apiKey, weatherInfo, topCount = 3) {
   const url = 'https://api.perplexity.ai/chat/completions';
   
-  // shortlist를 JSON 문자열로 변환 (간소화, 필드명을 실제 의미로 변환)
-  const placesSummary = shortlist.slice(0, 20).map(p => {
+  // shortlist를 JSON 문자열로 변환 (좋아요/싫어요 카운트 포함)
+  const placesSummary = shortlist.map(p => {
     const features = [];
     if (p.solo_ok) features.push('혼밥가능');
     if (p.group_ok) features.push('단체가능');
@@ -656,33 +694,45 @@ function callPerplexityAPI(text, shortlist, apiKey) {
     return {
       place_id: p.place_id,
       name: p.name,
-      category: p.category,
-      tags: p.tags,
-      walk_min: p.walk_min,
+      category: p.category || '',
+      tags: p.tags || '',
+      walk_min: p.walk_min || null,
       features: features.length > 0 ? features.join(', ') : '없음',
-      review_average: p.reviewStats.average
+      review_good: p.reviewStats.good || 0,
+      review_bad: p.reviewStats.bad || 0,
+      review_average: p.reviewStats.average || 0
     };
   });
   
-  const prompt = `다음은 점심 식당 후보 목록입니다. 사용자의 요청에 가장 적합한 Top 3를 선택하고, 각각에 대해 1문장으로 이유를 설명하세요.
+  const weatherText = weatherInfo.temp !== null 
+    ? `오늘 서울 영등포구 날씨: ${weatherInfo.description}, 기온 ${weatherInfo.temp}°C${weatherInfo.feels_like ? ` (체감 ${weatherInfo.feels_like}°C)` : ''}`
+    : '';
+  
+  const userRequestText = text && text.trim() ? `사용자 요청: "${text.trim()}"` : '사용자 요청: 없음 (일반 추천)';
+  const topCountText = topCount === 1 ? 'Top 1개' : `Top ${topCount}개`;
+  
+  const prompt = `다음은 점심 식당 후보 목록입니다. ${userRequestText}
 
-사용자 요청: "${text}"
-
-후보 목록:
+${weatherText ? weatherText + '\n\n' : ''}후보 목록 (좋아요 수가 많은 상위 30개):
 ${JSON.stringify(placesSummary, null, 2)}
 
 **중요 제약사항:**
 1. 반드시 위 후보 목록의 place_id만 사용해야 합니다.
-2. 각 추천에 대해 reason 필드에 1문장으로 이유를 작성하세요.
-3. reason 작성 시 "혼밥가능", "단체가능", "예약가능" 같은 자연스러운 표현을 사용하세요. 필드명(solo_ok, group_ok 등)을 직접 사용하지 마세요.
-4. JSON 형식으로만 응답하세요.
+2. ${topCountText}를 선택하고, 각각에 대해 1문장으로 이유를 설명하세요.
+3. reason 작성 시 다음을 반드시 고려하세요:
+   - 카테고리(category): 한식, 일식, 중식, 양식, 카페 등
+   - 태그(tags): 가성비, 혼밥, 단체 등
+   - 좋아요 수(review_good): 많은 좋아요는 인기와 만족도를 나타냅니다
+   - 날씨: ${weatherText ? '현재 날씨를 고려하여 적합한 메뉴나 장소를 추천하세요.' : '날씨 정보가 없으므로 일반적인 추천을 하세요.'}
+4. reason 작성 시 "혼밥가능", "단체가능", "예약가능" 같은 자연스러운 표현을 사용하세요. 필드명(solo_ok, group_ok 등)을 직접 사용하지 마세요.
+5. JSON 형식으로만 응답하세요.
 
 응답 형식:
 {
   "recommendations": [
     {
       "place_id": "place_123",
-      "reason": "이유 1문장"
+      "reason": "이유 1문장 (카테고리, 태그, 좋아요 수, 날씨를 고려한 자연스러운 설명)"
     }
   ]
 }`;
@@ -702,7 +752,7 @@ ${JSON.stringify(placesSummary, null, 2)}
         }
       ],
       temperature: 0.3,
-      max_tokens: 500
+      max_tokens: topCount === 1 ? 300 : 500
     })
   };
   
