@@ -4,28 +4,36 @@
 
 ## 아키텍처
 
-- **CRUD(장소/설정/비밀번호/이미지 등)**: 프론트엔드 → **Google Apps Script** 직접 호출 (Google Sheets·Drive)
+- **CRUD(장소/설정/비밀번호/이미지 등)**: 프론트엔드 → **server.js(프록시)** → **Google Apps Script** (Google Sheets·Drive)
+  - CORS 문제 해결을 위해 프록시를 통해 Apps Script 호출
 - **외부 API(네이버 검색, NCP 지오코딩, TMAP 도보거리, 정적 지도)**: 프론트엔드 → **server.js(프록시)** → Naver/NCP/TMAP
+- **카카오톡 봇**: 카카오톡 → **server.js** → **Google Apps Script** (점심 추천)
 
-프론트엔드에서 `APPS_SCRIPT_URL`(웹앱 배포 URL)과 `API_BASE_URL`(Render 등 프록시 서버)을 구분해 사용합니다.
+프론트엔드에서 `API_BASE_URL`(Render 등 프록시 서버)을 통해 모든 API 호출을 수행합니다.
 
 ## 📱 기능
 
 ### 1. 🔍 추천
 - 자연어로 점심 식당 추천 요청
 - 프리셋 선택 (혼밥, 단체, 예약)
-- AI 기반 개인화 추천
-- 마음에 들지 않는 장소 제외 기능
+- AI 기반 개인화 추천 (Perplexity AI)
+  - 날씨 정보 반영 (서울 영등포구 기상청 API)
+  - 좋아요 수 기반 추천 (상위 30개 중 선택)
+  - 사용자 요청 시 TOP 1, 없으면 TOP 3 반환
+- 카카오톡 봇 연동 (`/점심` 명령어)
 
 ### 2. 📋 목록
 - 등록된 모든 식당 목록 조회
 - 실시간 검색 및 필터링
 - 상세 정보 확인 (주소, 카테고리, 가격대, 도보 시간 등)
+- 리뷰 기능 (좋아요/싫어요 및 코멘트 작성)
+- 리뷰 통계 표시 (좋아요/싫어요 수)
 
 ### 3. ➕ 등록
 - 새로운 식당 정보 등록
 - 주소, 카테고리, 가격대, 태그 등 상세 정보 입력
 - 네이버 지도 연동
+- 관리자 기능 (장소 삭제 시 리뷰도 함께 삭제)
 
 ## 🚀 시작하기
 
@@ -44,18 +52,12 @@ git clone https://github.com/your-username/your-repo.git
 cd your-repo/lunch-service
 ```
 
-2. URL 설정 (index.html 또는 빌드 시 주입):
+2. URL 설정 (Vercel 환경변수 또는 빌드 시 주입):
 
-- **APPS_SCRIPT_URL**: Apps Script 웹앱 배포 URL (CRUD용). 예: `https://script.google.com/macros/s/XXXX/exec`
-- **API_BASE_URL**: 외부 API 프록시 서버 URL (검색/지오코딩/정적 지도용). 예: `https://your-render-app.onrender.com`
+- **API_BASE_URL**: 백엔드 프록시 서버 URL (모든 API 호출용). 예: `https://your-render-app.onrender.com`
+- **APPS_SCRIPT_URL**: (선택) 프록시 사용 시 비워도 됨
 
-```html
-<script>
-  window.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
-  window.API_BASE_URL = 'https://your-render-app.onrender.com';
-</script>
-<script src="lunch.js"></script>
-```
+Vercel 환경변수로 설정하거나, 빌드 시 `build.js`가 자동으로 주입합니다.
 
 3. 로컬 개발 서버 실행:
 
@@ -153,28 +155,38 @@ const allowedOrigins = [
 ];
 ```
 
+**참고**: Apps Script는 CORS 헤더를 지원하지 않으므로, 모든 Apps Script 호출은 `server.js` 프록시를 통해 수행됩니다.
+
 ## 📖 API 문서
 
-### Apps Script 직접 호출 (CRUD)
+### server.js 프록시 (모든 API 호출)
 
-프론트엔드에서 `callAppsScript(path, method, body)`로 호출하는 경로:
+프론트엔드에서 `API_BASE_URL/lunch/api/apps-script`를 통해 Apps Script 호출:
 
-- `places` (GET) - 장소 목록 조회
+- `places` (GET) - 장소 목록 조회 (리뷰 통계 포함)
 - `places` (POST) - 새 장소 등록
-- `places/{id}` (PUT/DELETE) - 장소 수정/삭제
+- `places/{id}` (PUT/DELETE) - 장소 수정/삭제 (삭제 시 리뷰도 함께 삭제)
+- `reviews` (POST) - 리뷰 작성 (좋아요/싫어요, 코멘트 필수)
 - `config` (GET/POST) - 설정 조회/저장
 - `verify-register-password` (POST) - 등록 비밀번호 검증
 - `admin-verify` (POST) - 관리자 비밀번호 검증
 - `upload-image` (POST) - 이미지 업로드
-- `recommend` (POST) - 점심 추천
+- `recommend` (POST) - 점심 추천 (text 선택사항, 없으면 TOP3)
 - `daily-recommendations` (GET) - 오늘의 추천
 - `generate-daily` (POST) - 일일 추천 생성
 
-### server.js 프록시 (외부 API만)
+### server.js 프록시 (외부 API)
 
 - `POST /lunch/search-place` - 네이버 지역 검색
 - `POST /lunch/geocode-address` - NCP 지오코딩 + TMAP 도보거리
 - `GET /lunch/static-map` - NCP 정적 지도 이미지
+
+### 카카오톡 봇 API
+
+- `POST /lunch/recommend` - 카카오톡 봇용 점심 추천 프록시
+  - `text`: 선택사항 (없으면 빈 문자열로 TOP3 반환)
+  - `preset`: 배열 (기본값: [])
+  - `exclude`: 배열 (기본값: [])
 
 ## 🎨 UI/UX
 
@@ -200,6 +212,31 @@ const allowedOrigins = [
 }
 ```
 
+## 💬 카카오톡 봇 연동
+
+점심 추천 서비스는 카카오톡 봇과 연동되어 있습니다.
+
+### 사용 방법
+
+- `/점심` - 오늘 추천 TOP 3 반환
+- `/점심 [메뉴·기분]` - 맞춤 1곳 추천
+  - 예: `/점심 매콤한거`
+  - 예: `/점심 가벼운 샐러드`
+
+### 응답 형식
+
+카카오톡 봇 응답에는 다음 정보가 포함됩니다:
+- 추천 장소 정보 (이름, 이유, 주소, 지도 링크, 카테고리, 도보 시간)
+- 점심 추천 사용법 안내
+- 웹 서비스 링크 (더 많은 기능)
+
+### 설정
+
+카카오톡 봇 연동을 위해 `server.js`에 다음 환경변수가 필요합니다:
+- `GOOGLE_APPS_SCRIPT_URL`: Apps Script 웹앱 배포 URL
+- `LUNCH_WEB_URL`: 점심 웹 앱 주소 (카카오톡 메시지에 링크로 사용)
+- `LUNCH_API_KEY`: (선택) Apps Script API 키 검증용
+
 ## 🧪 테스트
 
 ### 수동 테스트
@@ -208,14 +245,20 @@ const allowedOrigins = [
    - 자연어 입력: "가까운 곳에서 혼밥 가능한 곳"
    - 프리셋 선택: 혼밥, 단체, 예약
    - 결과 확인
+   - 날씨 정보 반영 여부 확인
 
 2. **목록 기능**:
    - 검색어 입력: "한식", "가성비" 등
    - 필터링 확인
+   - 리뷰 작성 및 통계 확인
 
 3. **등록 기능**:
    - 필수 필드 검증 (이름, 주소)
    - 등록 후 목록에서 확인
+
+4. **카카오톡 봇**:
+   - `/점심` 명령어로 TOP3 추천 확인
+   - `/점심 매콤한거` 등으로 맞춤 추천 확인
 
 ### 브라우저 호환성
 
@@ -228,10 +271,11 @@ const allowedOrigins = [
 
 ### API 호출 실패
 
-1. **CRUD 실패**: `APPS_SCRIPT_URL`이 올바른지 확인 (index.html 또는 Vercel 환경변수)
+1. **CRUD 실패**: `API_BASE_URL`이 올바른지 확인 (Vercel 환경변수)
 2. **검색/지도 실패**: `API_BASE_URL`(Render 등)이 올바른지 확인
 3. 네트워크 탭에서 요청 URL과 응답 코드 확인
 4. CORS 에러 시 백엔드(server.js) 허용 도메인 확인
+5. Render 환경변수 확인: `GOOGLE_APPS_SCRIPT_URL`, `LUNCH_WEB_URL` 설정 여부
 
 ### 추천 결과가 없음
 
@@ -257,8 +301,21 @@ const allowedOrigins = [
 
 프로젝트 관련 문의는 이메일 또는 GitHub Issues로 연락주세요.
 
+## 📋 주요 변경사항
+
+### v2.0 (최신)
+- ✅ CORS 문제 해결: 프록시를 통한 Apps Script 호출
+- ✅ 리뷰 기능 추가: 좋아요/싫어요 및 코멘트 작성
+- ✅ AI 추천 최적화: 날씨 반영, 좋아요 수 기반 추천
+- ✅ 카카오톡 봇 연동: `/점심` 명령어 지원
+- ✅ 필드명 변경: `indoor_ok` → `reservation_ok`
+- ✅ UI 개선: 헤더 패딩 최적화, 미사용 기능 제거
+
+### v1.0
+- 초기 릴리스
+
 ## 🔗 관련 링크
 
-- [백엔드 설정 가이드](../docs/lunch-service/setup-guide.md)
-- [Apps Script 템플릿](../docs/lunch-service/apps-script-template.js)
+- [배포 환경 설정 가이드](./DEPLOY_ENV_CHECKLIST.md)
+- [Apps Script 템플릿](./apps-script-template.js)
 - [API 스펙](../API_SPEC.md)

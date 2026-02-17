@@ -21,6 +21,15 @@
 - Render에 `LUNCH_API_KEY` 설정
 - Apps Script 스크립트 속성에 `API_KEY` = 위와 같은 값 설정
 
+### Apps Script 스크립트 속성 (날씨 API)
+
+| 변수명 | 설명 | 필수 여부 |
+|--------|------|----------|
+| `KMA_API_KEY` | 기상청 초단기실황 API 키 (공공데이터포털 발급) | 선택 (없으면 날씨 정보 없이 추천) |
+| `PERPLEXITY_API_KEY` | Perplexity AI API 키 (AI 추천용) | 선택 (없으면 폴백 추천) |
+
+**참고**: 날씨 API 키는 공공데이터포털(https://www.data.go.kr)에서 발급받을 수 있습니다.
+
 ### 점심 관련 외부 API (기능별로 필요할 때만)
 
 | 변수명 | 용도 | 없으면 |
