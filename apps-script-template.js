@@ -50,7 +50,11 @@ function migrateIndoorToReservation() {
 
 // 기상청 API 테스트 함수
 function testWeatherAPI() {
-  const apiKey = '59c12627231e31f0c49b608447cbafdb00eeea0a469b5d1338b7268f03bcf0fb';
+  // 테스트용 인증키 (실제 사용 시 스크립트 속성에서 가져오기)
+  let apiKey = PropertiesService.getScriptProperties().getProperty('KMA_API_KEY');
+  if (!apiKey) {
+    apiKey = '59c12627231e31f0c49b608447cbafdb00eeea0a469b5d1338b7268f03bcf0fb';
+  }
   const lat = 37.5264; // 서울 영등포구
   const lon = 126.8962;
   
@@ -59,22 +63,36 @@ function testWeatherAPI() {
     const grid = convertToGrid(lat, lon);
     Logger.log(`격자 좌표: nx=${grid.nx}, ny=${grid.ny}`);
     
-    // 현재 시간 기준
+    // 현재 시간 기준 (초단기실황은 매 시간 업데이트)
     const now = new Date();
     const baseDate = Utilities.formatDate(now, 'Asia/Seoul', 'yyyyMMdd');
-    const baseTime = '0200'; // 02시 기준
+    const currentHour = parseInt(Utilities.formatDate(now, 'Asia/Seoul', 'HH'));
+    const currentMin = parseInt(Utilities.formatDate(now, 'Asia/Seoul', 'mm'));
+    
+    // base_time은 현재 시간의 1시간 전 정각 (예: 14:30이면 13:00 데이터 조회)
+    // 초단기실황은 매 정각에 업데이트되므로 최신 데이터는 1시간 전
+    let baseHour = currentHour > 0 ? currentHour - 1 : 23;
+    // 자정 근처 처리
+    if (currentHour === 0) {
+      baseHour = 23;
+      // baseDate도 하루 전으로 조정 필요할 수 있지만 일단 현재 날짜 사용
+    }
+    const baseTime = String(baseHour).padStart(2, '0') + '00';
+    
+    Logger.log(`현재 시간: ${Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd HH:mm')}`);
+    Logger.log(`base_date: ${baseDate}, base_time: ${baseTime}`);
     
     // 기상청 초단기실황 API 테스트
     const url = `http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${encodeURIComponent(apiKey)}&pageNo=1&numOfRows=10&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${grid.nx}&ny=${grid.ny}`;
     
-    Logger.log(`API URL: ${url}`);
+    Logger.log(`API URL (인증키 제외): http://apis.data.go.kr/...&base_date=${baseDate}&base_time=${baseTime}&nx=${grid.nx}&ny=${grid.ny}`);
     
     const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
     const statusCode = response.getResponseCode();
     const responseText = response.getContentText();
     
     Logger.log(`응답 상태 코드: ${statusCode}`);
-    Logger.log(`응답 내용: ${responseText.substring(0, 500)}`);
+    Logger.log(`응답 내용: ${responseText.substring(0, 1000)}`);
     
     if (statusCode === 200) {
       const data = JSON.parse(responseText);
@@ -115,10 +133,30 @@ function testWeatherAPI() {
         };
       }
     } else {
+      // 403 오류 상세 분석
+      let errorDetail = '';
+      try {
+        const errorData = JSON.parse(responseText);
+        if (errorData.response && errorData.response.header) {
+          errorDetail = `결과코드: ${errorData.response.header.resultCode}, 메시지: ${errorData.response.header.resultMsg}`;
+        }
+      } catch (e) {
+        errorDetail = responseText.substring(0, 500);
+      }
+      
+      Logger.log(`403 오류 상세: ${errorDetail}`);
+      
       return {
         success: false,
         message: `HTTP ${statusCode} 오류`,
-        response: responseText.substring(0, 500)
+        detail: errorDetail,
+        response: responseText.substring(0, 500),
+        url_info: {
+          base_date: baseDate,
+          base_time: baseTime,
+          nx: grid.nx,
+          ny: grid.ny
+        }
       };
     }
   } catch (error) {
@@ -794,16 +832,22 @@ function getWeatherInfo() {
     // 격자 좌표로 변환
     const grid = convertToGrid(lat, lon);
     
-    // 현재 시간 기준 (기상청 API는 3시간 단위로 업데이트)
+    // 현재 시간 기준 (초단기실황은 매 시간 업데이트, base_time은 정각 시간)
     const now = new Date();
     const baseDate = Utilities.formatDate(now, 'Asia/Seoul', 'yyyyMMdd');
-    const baseTime = '0200'; // 02시 기준 (가장 최근 데이터)
+    const currentHour = parseInt(Utilities.formatDate(now, 'Asia/Seoul', 'HH'));
+    // base_time은 현재 시간의 1시간 전 정각 (예: 14시면 13시 데이터 조회)
+    // 초단기실황은 매 정각에 업데이트되므로, 현재 시간이 14:30이면 13:00 데이터가 최신
+    const baseHour = currentHour > 0 ? currentHour - 1 : 23;
+    const baseTime = String(baseHour).padStart(2, '0') + '00';
     
-    // 기상청 동네예보 API (공공데이터포털)
+    // 기상청 초단기실황 API (공공데이터포털)
     const url = `http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${encodeURIComponent(apiKey)}&pageNo=1&numOfRows=10&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${grid.nx}&ny=${grid.ny}`;
     
     const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    if (response.getResponseCode() === 200) {
+    const statusCode = response.getResponseCode();
+    
+    if (statusCode === 200) {
       const data = JSON.parse(response.getContentText());
       
       if (data.response && data.response.body && data.response.body.items && data.response.body.items.item) {
@@ -834,10 +878,23 @@ function getWeatherInfo() {
           temp: temp,
           feels_like: null // 기상청 API에는 체감온도가 없음
         };
+      } else {
+        // 응답은 있지만 데이터가 없는 경우
+        const errorMsg = data.response?.header?.resultMsg || '데이터 없음';
+        console.error('날씨 API 응답 오류:', errorMsg, JSON.stringify(data.response?.header));
+      }
+    } else {
+      // HTTP 오류 응답 파싱
+      try {
+        const errorData = JSON.parse(response.getContentText());
+        const errorMsg = errorData.response?.header?.resultMsg || `HTTP ${statusCode}`;
+        console.error('날씨 API HTTP 오류:', statusCode, errorMsg);
+      } catch (e) {
+        console.error('날씨 API 오류 응답 파싱 실패:', statusCode, response.getContentText().substring(0, 200));
       }
     }
   } catch (error) {
-    console.error('날씨 정보 가져오기 실패:', error);
+    console.error('날씨 정보 가져오기 실패:', error.toString());
   }
   
   return { description: '날씨 정보 없음', temp: null };
