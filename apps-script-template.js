@@ -16,6 +16,37 @@
  * 7. 배포 URL을 복사하여 server.js의 GOOGLE_APPS_SCRIPT_URL에 설정
  */
 
+// 컬럼명 마이그레이션: indoor_ok → reservation_ok
+function migrateIndoorToReservation() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('places');
+  
+  if (!sheet) {
+    Logger.log('places 시트를 찾을 수 없습니다.');
+    return 'places 시트를 찾을 수 없습니다.';
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) {
+    Logger.log('데이터가 없습니다.');
+    return '데이터가 없습니다.';
+  }
+  
+  const headers = data[0];
+  const indoorCol = headers.indexOf('indoor_ok');
+  
+  if (indoorCol === -1) {
+    Logger.log('indoor_ok 컬럼이 없습니다. 이미 마이그레이션되었거나 컬럼명이 다릅니다.');
+    return 'indoor_ok 컬럼이 없습니다.';
+  }
+  
+  // 컬럼명 변경
+  sheet.getRange(1, indoorCol + 1).setValue('reservation_ok');
+  Logger.log('컬럼명이 indoor_ok에서 reservation_ok로 변경되었습니다.');
+  
+  return '✅ 마이그레이션 완료: indoor_ok → reservation_ok';
+}
+
 // 권한 확인 함수 (테스트용)
 function checkPermissions() {
   var results = [];
@@ -113,8 +144,12 @@ function generateId(prefix) {
 // GET /places - 장소 목록 조회
 function getPlaces() {
   const places = getSheetData('places');
-  // 각 장소에 리뷰 카운트 추가
+  // 각 장소에 리뷰 카운트 추가 및 indoor_ok → reservation_ok 호환성 처리
   const placesWithReviews = places.map(place => {
+    // 호환성: indoor_ok가 있으면 reservation_ok로 매핑 (마이그레이션 전용)
+    if (place.indoor_ok !== undefined && place.reservation_ok === undefined) {
+      place.reservation_ok = place.indoor_ok;
+    }
     const reviewStats = aggregateReviews(place.place_id);
     return {
       ...place,
@@ -537,8 +572,16 @@ function recommendLunch(requestData) {
   // 1. 모든 장소 가져오기
   const places = getSheetData('places');
   
+  // 호환성: indoor_ok → reservation_ok 매핑
+  const placesNormalized = places.map(place => {
+    if (place.indoor_ok !== undefined && place.reservation_ok === undefined) {
+      place.reservation_ok = place.indoor_ok;
+    }
+    return place;
+  });
+  
   // 2. 제외 목록 필터링
-  const filteredPlaces = places.filter(p => !exclude.includes(p.place_id));
+  const filteredPlaces = placesNormalized.filter(p => !exclude.includes(p.place_id));
   
   // 3. 리뷰 집계 및 점수 계산
   const scoredPlaces = filteredPlaces.map(place => {
