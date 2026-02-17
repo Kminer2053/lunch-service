@@ -337,10 +337,10 @@
         <div id="toast" class="toast"></div>
     </div>
 
-    <!-- 백엔드 URL: 배포 시 실제 값으로 설정 (Vercel 환경변수 등) -->
+    <!-- 백엔드 URL: Vercel 환경변수에서 빌드 시 주입 (로컬은 build.js 없이 열면 placeholder 그대로) -->
     <script>
-        window.APPS_SCRIPT_URL = window.APPS_SCRIPT_URL || ''; // Apps Script 웹앱 URL (CRUD)
-        window.API_BASE_URL = window.API_BASE_URL || 'https://myteamdashboard.onrender.com'; // 외부 API 프록시 (검색/지오코딩/지도)
+        window.APPS_SCRIPT_URL = window.APPS_SCRIPT_URL || '__APPS_SCRIPT_URL__';
+        window.API_BASE_URL = window.API_BASE_URL || '__API_BASE_URL__';
     </script>
     <script src="lunch.js"></script>
 </body>

@@ -1,16 +1,20 @@
 // 백엔드 URL: CRUD는 Apps Script 직접, 외부 API는 server.js(프록시)
 const APPS_SCRIPT_URL = window.APPS_SCRIPT_URL || '';
-const API_BASE_URL = window.API_BASE_URL || 'https://myteamdashboard.onrender.com';
+const API_BASE_URL = (window.API_BASE_URL && !String(window.API_BASE_URL).startsWith('__'))
+    ? window.API_BASE_URL
+    : 'https://myteamdashboard.onrender.com';
 
 /** Apps Script 직접 호출 (path, method, body) */
 async function callAppsScript(path, method = 'GET', body = null) {
-    if (!APPS_SCRIPT_URL) throw new Error('APPS_SCRIPT_URL이 설정되지 않았습니다.');
+    const url = APPS_SCRIPT_URL && !String(APPS_SCRIPT_URL).startsWith('__') ? APPS_SCRIPT_URL : '';
+    if (!url) throw new Error('APPS_SCRIPT_URL이 설정되지 않았습니다.');
     const cleanPath = path.replace(/^\//, '');
     const httpMethod = (method === 'PUT' || method === 'DELETE') ? 'POST' : method;
-    const url = `${APPS_SCRIPT_URL}?path=${encodeURIComponent(cleanPath)}&method=${method}`;
+    const baseUrl = APPS_SCRIPT_URL && !String(APPS_SCRIPT_URL).startsWith('__') ? APPS_SCRIPT_URL : '';
+    const apiUrl = `${baseUrl}?path=${encodeURIComponent(cleanPath)}&method=${method}`;
     const opts = { method: httpMethod, headers: { 'Content-Type': 'application/json' } };
     if (body && httpMethod === 'POST') opts.body = JSON.stringify(body);
-    const res = await fetch(url, opts);
+    const res = await fetch(apiUrl, opts);
     return res.json();
 }
 
