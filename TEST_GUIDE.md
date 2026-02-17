@@ -1,5 +1,12 @@
 # 점심 서비스 테스트 가이드
 
+## 아키텍처
+
+- CRUD(장소·설정·비밀번호·이미지 등): 프론트엔드 → **Apps Script** 직접 호출
+- 외부 API(검색·지오코딩·정적 지도): 프론트엔드 → **server.js** (search-place, geocode-address, static-map)
+
+테스트 시 `APPS_SCRIPT_URL`이 올바르게 설정되어 있어야 장소 목록·등록·수정·삭제·비밀번호 검증이 동작합니다.
+
 ## 배포 순서
 
 ### 1단계: Apps Script 배포
@@ -21,7 +28,7 @@
 **확인 사항**:
 - Render 배포 로그에서 에러 없이 빌드 완료 확인
 - 서버가 정상적으로 시작되었는지 확인
-- 환경변수 설정 확인 (`GOOGLE_APPS_SCRIPT_URL`, `LUNCH_API_KEY` 등)
+- 환경변수 설정 확인 (점심 서비스는 외부 API용만: `NAVER_*`, `NCP_*`, `TMAP_*`)
 
 ### 3단계: 프론트엔드 배포 (Vercel)
 **방법**: Vercel 자동 배포 또는 수동 배포
@@ -212,17 +219,21 @@
 3. Apps Script 실행 로그 확인 (디버깅 메시지 포함)
 4. `request.parameter.method` 값 확인
 
-### 백엔드 관련 문제
+### 백엔드(Render) 관련 문제
 1. Render 배포 로그 확인
 2. 서버 로그에서 에러 메시지 확인
-3. 환경변수 설정 확인
-4. `callAppsScript` 함수의 HTTP 메서드 변환 로직 확인
+3. 환경변수 설정 확인 (NAVER_*, NCP_*, TMAP_*)
+4. 검색/지오코딩/정적지도 요청만 server.js를 경유하는지 확인
+
+### 프론트엔드 → Apps Script 직접 호출 관련
+1. `APPS_SCRIPT_URL`이 배포된 웹앱 URL과 일치하는지 확인
+2. `callAppsScript(path, method, body)` 호출 시 path/method가 올바른지 확인
 
 ### 프론트엔드 관련 문제
 1. 브라우저 콘솔 에러 확인
-2. 네트워크 탭에서 실패한 요청 확인
+2. 네트워크 탭에서 실패한 요청 확인 (Apps Script URL vs API_BASE_URL 구분)
 3. Vercel 빌드 로그 확인
-4. 세션 스토리지 상태 확인 (`sessionStorage.getItem('register_auth')`)
+4. `window.APPS_SCRIPT_URL` / `window.API_BASE_URL` 값 확인
 
 ## 성공 기준
 

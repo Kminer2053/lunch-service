@@ -1,5 +1,18 @@
-// API 기본 URL 설정
+// 백엔드 URL: CRUD는 Apps Script 직접, 외부 API는 server.js(프록시)
+const APPS_SCRIPT_URL = window.APPS_SCRIPT_URL || '';
 const API_BASE_URL = window.API_BASE_URL || 'https://myteamdashboard.onrender.com';
+
+/** Apps Script 직접 호출 (path, method, body) */
+async function callAppsScript(path, method = 'GET', body = null) {
+    if (!APPS_SCRIPT_URL) throw new Error('APPS_SCRIPT_URL이 설정되지 않았습니다.');
+    const cleanPath = path.replace(/^\//, '');
+    const httpMethod = (method === 'PUT' || method === 'DELETE') ? 'POST' : method;
+    const url = `${APPS_SCRIPT_URL}?path=${encodeURIComponent(cleanPath)}&method=${method}`;
+    const opts = { method: httpMethod, headers: { 'Content-Type': 'application/json' } };
+    if (body && httpMethod === 'POST') opts.body = JSON.stringify(body);
+    const res = await fetch(url, opts);
+    return res.json();
+}
 
 // 전역 상태
 let selectedPresets = [];
@@ -112,11 +125,7 @@ async function verifyRegisterPassword() {
     if (!pw) { showToast('암호를 입력하세요.'); return; }
     showLoading(true);
     try {
-        const res = await fetch(`${API_BASE_URL}/lunch/verify-register-password`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password: pw })
-        });
-        const data = await res.json();
+        const data = await callAppsScript('verify-register-password', 'POST', { password: pw });
         if (data.success) {
             registerAuthenticated = true;
             // 세션 스토리지에 저장하지 않음 (매번 입력 요구)
@@ -160,11 +169,7 @@ function initRecommend() {
 async function requestRecommendation(text, preset = [], exclude = []) {
     showLoading(true);
     try {
-        const response = await fetch(`${API_BASE_URL}/lunch/recommend`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, preset, exclude })
-        });
-        const data = await response.json();
+        const data = await callAppsScript('recommend', 'POST', { text, preset, exclude });
         if (data.success && data.data?.length > 0) {
             displayRecommendations(data.data, 'recommend-results');
         } else {
@@ -180,8 +185,7 @@ async function requestRecommendation(text, preset = [], exclude = []) {
 
 async function loadDailyRecommendations() {
     try {
-        const res = await fetch(`${API_BASE_URL}/lunch/daily-recommendations`);
-        const data = await res.json();
+        const data = await callAppsScript('daily-recommendations', 'GET');
         if (data.success && data.data && data.data.length > 0) {
             const section = document.getElementById('daily-section');
             section.style.display = 'block';
@@ -193,13 +197,26 @@ async function loadDailyRecommendations() {
     } catch (e) { /* silent */ }
 }
 
+function bindImageErrorHandlers(container) {
+    if (!container) return;
+    container.querySelectorAll('.place-card-img').forEach(img => {
+        img.addEventListener('error', function () {
+            const wrapper = this.closest('.place-card-img-wrapper');
+            if (!wrapper) return;
+            const placeholder = wrapper.querySelector('.place-card-img-placeholder');
+            this.style.display = 'none';
+            if (placeholder) placeholder.style.display = 'flex';
+        });
+    });
+}
+
 function displayRecommendations(recommendations, containerId) {
     const container = document.getElementById(containerId);
     container.innerHTML = recommendations.map((place, index) => {
         const imageUrl = getDisplayImageUrl(place.image_url);
         const imgHtml = imageUrl
-            ? `<img class="place-card-img" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(place.name)}" referrerpolicy="no-referrer" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
-            : '<div class="place-card-img-placeholder"><i data-lucide="utensils-crossed"></i></div>';
+            ? `<div class="place-card-img-wrapper"><img class="place-card-img" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(place.name)}" referrerpolicy="no-referrer"><div class="place-card-img-placeholder" style="display:none"><i data-lucide="utensils-crossed"></i></div></div>`
+            : '<div class="place-card-img-wrapper"><div class="place-card-img-placeholder"><i data-lucide="utensils-crossed"></i></div></div>';
         return `
             <div class="place-card">
                 ${imgHtml}
@@ -225,6 +242,7 @@ function displayRecommendations(recommendations, containerId) {
                 </div>
             </div>`;
     }).join('');
+    bindImageErrorHandlers(container);
     lucide.createIcons();
 }
 
@@ -253,8 +271,7 @@ function initList() {
 async function loadPlaces() {
     showLoading(true);
     try {
-        const response = await fetch(`${API_BASE_URL}/lunch/places`);
-        const data = await response.json();
+        const data = await callAppsScript('places', 'GET');
         if (data.success && data.data) {
             window.allPlaces = data.data;
             displayPlaces(data.data);
@@ -273,8 +290,8 @@ function displayPlaces(places) {
     placesList.innerHTML = places.map(place => {
         const imageUrl = getDisplayImageUrl(place.image_url);
         const imgHtml = imageUrl
-            ? `<img class="place-card-img" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(place.name)}" referrerpolicy="no-referrer" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\"place-card-img-placeholder\"><i data-lucide=\"utensils-crossed\"></i></div>'">`
-            : '<div class="place-card-img-placeholder"><i data-lucide="utensils-crossed"></i></div>';
+            ? `<div class="place-card-img-wrapper"><img class="place-card-img" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(place.name)}" referrerpolicy="no-referrer"><div class="place-card-img-placeholder" style="display:none"><i data-lucide="utensils-crossed"></i></div></div>`
+            : '<div class="place-card-img-wrapper"><div class="place-card-img-placeholder"><i data-lucide="utensils-crossed"></i></div></div>';
         return `
             <div class="place-card">
                 ${imgHtml}
@@ -297,6 +314,7 @@ function displayPlaces(places) {
                 </div>
             </div>`;
     }).join('');
+    bindImageErrorHandlers(placesList);
     lucide.createIcons();
 }
 
@@ -713,33 +731,17 @@ async function submitPlace() {
                     place_id: editMode && editingPlaceId ? editingPlaceId : ''
                 };
                 
-                console.log('[submitPlace] 이미지 업로드 요청:', { 
-                    url: `${API_BASE_URL}/lunch/upload-image`,
-                    hasPlaceId: !!uploadPayload.place_id,
-                    placeId: uploadPayload.place_id,
-                    editMode: editMode
-                });
+                console.log('[submitPlace] 이미지 업로드 요청:', { hasPlaceId: !!uploadPayload.place_id, placeId: uploadPayload.place_id, editMode: editMode });
                 
-                const imgRes = await fetch(`${API_BASE_URL}/lunch/upload-image`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(uploadPayload)
-                });
+                const imgData = await callAppsScript('upload-image', 'POST', uploadPayload);
                 
-                if (!imgRes.ok) {
-                    console.error('[submitPlace] 이미지 업로드 HTTP 오류:', imgRes.status, imgRes.statusText);
-                    const errorText = await imgRes.text();
-                    console.error('[submitPlace] 이미지 업로드 응답 본문:', errorText);
-                    showToast(`이미지 업로드 실패: HTTP ${imgRes.status} ${imgRes.statusText}`);
+                if (!imgData.success) {
+                    console.error('[submitPlace] 이미지 업로드 실패:', imgData.error);
+                    showToast(`이미지 업로드 실패: ${imgData.error || '알 수 없는 오류'}`);
                 } else {
-                    const imgData = await imgRes.json();
-                    console.log('[submitPlace] 이미지 업로드 응답:', imgData);
-                    if (imgData.success && imgData.data?.image_url) {
+                    if (imgData.data?.image_url) {
                         formData.image_url = imgData.data.image_url;
                         console.log('[submitPlace] 이미지 업로드 성공:', imgData.data.image_url);
-                    } else {
-                        const errorMsg = imgData.error || '알 수 없는 오류';
-                        console.error('[submitPlace] 이미지 업로드 실패:', errorMsg);
-                        showToast(`이미지 업로드 실패: ${errorMsg}`);
                     }
                 }
             } catch (e) { 
@@ -750,49 +752,20 @@ async function submitPlace() {
 
         // 수정 모드인지 확인
         if (editMode && editingPlaceId) {
-            // 수정 요청 (PUT)
-            console.log('[submitPlace] 수정 요청:', { 
-                url: `${API_BASE_URL}/lunch/admin/places/${editingPlaceId}`,
-                method: 'PUT',
-                placeId: editingPlaceId
-            });
-            
-            const response = await fetch(`${API_BASE_URL}/lunch/admin/places/${editingPlaceId}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
-            });
-            
-            if (!response.ok) {
-                console.error('[submitPlace] HTTP 오류:', response.status, response.statusText);
-                const errorText = await response.text();
-                console.error('[submitPlace] 응답 본문:', errorText);
-                showToast(`수정 실패: HTTP ${response.status} ${response.statusText}`);
-                return;
-            }
-            
-            const data = await response.json();
-            console.log('[submitPlace] 수정 응답:', data);
-            
+            const data = await callAppsScript(`places/${editingPlaceId}`, 'PUT', formData);
             if (data.success) {
                 showToast('수정 완료');
                 clearPlaceForm();
                 document.getElementById('register-step2').style.display = 'none';
                 document.getElementById('register-step1').style.display = 'flex';
                 loadPlaces();
-                loadAdminData(); // 관리자 페이지 목록도 새로고침
+                loadAdminData();
                 activateTab('list-tab');
             } else {
-                const errorMsg = data.error || '알 수 없는 오류';
-                console.error('[submitPlace] 수정 실패:', errorMsg);
-                showToast(`수정 실패: ${errorMsg}`);
+                showToast(`수정 실패: ${data.error || '알 수 없는 오류'}`);
             }
         } else {
-            // 등록 요청 (POST)
-            const response = await fetch(`${API_BASE_URL}/lunch/places`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
-            });
-            const data = await response.json();
+            const data = await callAppsScript('places', 'POST', formData);
             if (data.success) {
                 showToast('장소가 등록되었습니다!');
                 clearPlaceForm();
@@ -846,17 +819,13 @@ async function verifyAdmin() {
     if (!pw) { showToast('비밀번호를 입력하세요.'); return; }
     showLoading(true);
     try {
-        const res = await fetch(`${API_BASE_URL}/lunch/admin/verify`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password: pw })
-        });
-        const data = await res.json();
+        const data = await callAppsScript('admin-verify', 'POST', { password: pw });
         if (data.success) {
             document.getElementById('admin-modal').style.display = 'none';
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.getElementById('admin-tab').classList.add('active');
-            loadAdminData();
+            await loadAdminData();
             showToast('관리자 인증 완료');
         } else {
             showToast(data.error || '비밀번호가 일치하지 않습니다.');
@@ -869,8 +838,7 @@ async function verifyAdmin() {
 async function loadAdminData() {
     showLoading(true);
     try {
-        const res = await fetch(`${API_BASE_URL}/lunch/admin/config`);
-        const data = await res.json();
+        const data = await callAppsScript('config', 'GET');
         if (data.success && data.data) {
             const configs = Array.isArray(data.data) ? data.data : [];
             const regPw = configs.find(c => c.key === 'register_password');
@@ -882,8 +850,7 @@ async function loadAdminData() {
 
     // 장소 목록 로드
     try {
-        const res = await fetch(`${API_BASE_URL}/lunch/places`);
-        const data = await res.json();
+        const data = await callAppsScript('places', 'GET');
         if (data.success && data.data) {
             placesData = data.data; // 전역 변수에 저장
             const list = document.getElementById('admin-places-list');
@@ -1083,21 +1050,7 @@ async function savePlace(placeId) {
         
         console.log('[savePlace] 수정 요청:', { placeId, data });
         
-        const res = await fetch(`${API_BASE_URL}/lunch/admin/places/${placeId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        
-        if (!res.ok) {
-            console.error('[savePlace] HTTP 오류:', res.status, res.statusText);
-            const errorText = await res.text();
-            console.error('[savePlace] 응답 본문:', errorText);
-            showToast(`수정 실패: HTTP ${res.status} ${res.statusText}`);
-            return;
-        }
-        
-        const result = await res.json();
+        const result = await callAppsScript(`places/${placeId}`, 'PUT', data);
         console.log('[savePlace] 응답:', result);
         
         if (result.success) {
@@ -1121,11 +1074,7 @@ async function saveConfig(key, value) {
     if (!value) { showToast('값을 입력하세요.'); return; }
     showLoading(true);
     try {
-        const res = await fetch(`${API_BASE_URL}/lunch/admin/config`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key, value })
-        });
-        const data = await res.json();
+        const data = await callAppsScript('config', 'POST', { key, value });
         if (data.success) showToast('저장 완료');
         else showToast('저장 실패');
     } catch (e) { showToast('저장 중 오류'); }
@@ -1135,11 +1084,7 @@ async function saveConfig(key, value) {
 async function generateDailyManual() {
     showLoading(true);
     try {
-        const res = await fetch(`${API_BASE_URL}/lunch/admin/generate-daily`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: '오늘의 점심 추천' })
-        });
-        const data = await res.json();
+        const data = await callAppsScript('generate-daily', 'POST', { text: '오늘의 점심 추천' });
         if (data.success) showToast('일일 추천이 생성되었습니다.');
         else showToast('생성 실패: ' + (data.error || ''));
     } catch (e) { showToast('생성 중 오류'); }
@@ -1150,21 +1095,7 @@ async function deletePlace(placeId) {
     if (!confirm('이 장소를 삭제하시겠습니까?')) return;
     showLoading(true);
     try {
-        const url = `${API_BASE_URL}/lunch/admin/places/${placeId}`;
-        console.log('[deletePlace] 삭제 요청:', { url: url, method: 'DELETE', placeId: placeId });
-        
-        const res = await fetch(url, { method: 'DELETE' });
-        
-        if (!res.ok) {
-            console.error('[deletePlace] HTTP 오류:', res.status, res.statusText);
-            const errorText = await res.text();
-            console.error('[deletePlace] 응답 본문:', errorText);
-            showToast(`삭제 실패: HTTP ${res.status} ${res.statusText}`);
-            return;
-        }
-        
-        const data = await res.json();
-        console.log('[deletePlace] 응답:', data);
+        const data = await callAppsScript(`places/${placeId}`, 'DELETE');
         
         if (data.success) {
             showToast('삭제 완료');

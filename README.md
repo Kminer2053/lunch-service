@@ -2,6 +2,13 @@
 
 간편한 점심 추천 및 관리 웹 애플리케이션
 
+## 아키텍처
+
+- **CRUD(장소/설정/비밀번호/이미지 등)**: 프론트엔드 → **Google Apps Script** 직접 호출 (Google Sheets·Drive)
+- **외부 API(네이버 검색, NCP 지오코딩, TMAP 도보거리, 정적 지도)**: 프론트엔드 → **server.js(프록시)** → Naver/NCP/TMAP
+
+프론트엔드에서 `APPS_SCRIPT_URL`(웹앱 배포 URL)과 `API_BASE_URL`(Render 등 프록시 서버)을 구분해 사용합니다.
+
 ## 📱 기능
 
 ### 1. 🔍 추천
@@ -26,8 +33,8 @@
 
 - Node.js 14 이상
 - npm 또는 yarn
-- 백엔드 API 서버 (server.js)
-- Google Apps Script 배포 (선택사항, 백엔드 역할)
+- Google Apps Script 웹앱 배포 (CRUD 백엔드)
+- 백엔드 API 서버 (server.js) — 외부 API 프록시용 (검색/지오코딩/지도)
 
 ### 설치
 
@@ -37,19 +44,15 @@ git clone https://github.com/your-username/your-repo.git
 cd your-repo/lunch-service
 ```
 
-2. 환경변수 설정:
+2. URL 설정 (index.html 또는 빌드 시 주입):
 
-`lunch.js` 파일 상단의 `API_BASE_URL`을 백엔드 서버 URL로 변경:
-
-```javascript
-const API_BASE_URL = 'https://your-backend-server.com';
-```
-
-또는 HTML에서 동적으로 설정:
+- **APPS_SCRIPT_URL**: Apps Script 웹앱 배포 URL (CRUD용). 예: `https://script.google.com/macros/s/XXXX/exec`
+- **API_BASE_URL**: 외부 API 프록시 서버 URL (검색/지오코딩/정적 지도용). 예: `https://your-render-app.onrender.com`
 
 ```html
 <script>
-  window.API_BASE_URL = 'https://your-backend-server.com';
+  window.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
+  window.API_BASE_URL = 'https://your-render-app.onrender.com';
 </script>
 <script src="lunch.js"></script>
 ```
@@ -152,14 +155,26 @@ const allowedOrigins = [
 
 ## 📖 API 문서
 
-전체 API 스펙은 [API_SPEC.md](../API_SPEC.md)를 참조하세요.
+### Apps Script 직접 호출 (CRUD)
 
-### 주요 엔드포인트
+프론트엔드에서 `callAppsScript(path, method, body)`로 호출하는 경로:
 
-- `GET /lunch/places` - 장소 목록 조회
-- `POST /lunch/places` - 새 장소 등록
-- `POST /lunch/reviews` - 리뷰 등록
-- `POST /lunch/recommend` - 점심 추천 요청
+- `places` (GET) - 장소 목록 조회
+- `places` (POST) - 새 장소 등록
+- `places/{id}` (PUT/DELETE) - 장소 수정/삭제
+- `config` (GET/POST) - 설정 조회/저장
+- `verify-register-password` (POST) - 등록 비밀번호 검증
+- `admin-verify` (POST) - 관리자 비밀번호 검증
+- `upload-image` (POST) - 이미지 업로드
+- `recommend` (POST) - 점심 추천
+- `daily-recommendations` (GET) - 오늘의 추천
+- `generate-daily` (POST) - 일일 추천 생성
+
+### server.js 프록시 (외부 API만)
+
+- `POST /lunch/search-place` - 네이버 지역 검색
+- `POST /lunch/geocode-address` - NCP 지오코딩 + TMAP 도보거리
+- `GET /lunch/static-map` - NCP 정적 지도 이미지
 
 ## 🎨 UI/UX
 
@@ -213,9 +228,10 @@ const allowedOrigins = [
 
 ### API 호출 실패
 
-1. 네트워크 탭에서 요청 확인
-2. CORS 에러 확인 (백엔드 설정 필요)
-3. API URL이 올바른지 확인
+1. **CRUD 실패**: `APPS_SCRIPT_URL`이 올바른지 확인 (index.html 또는 Vercel 환경변수)
+2. **검색/지도 실패**: `API_BASE_URL`(Render 등)이 올바른지 확인
+3. 네트워크 탭에서 요청 URL과 응답 코드 확인
+4. CORS 에러 시 백엔드(server.js) 허용 도메인 확인
 
 ### 추천 결과가 없음
 

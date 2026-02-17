@@ -57,21 +57,6 @@ function getPerplexityApiKey() {
   return props.getProperty('PERPLEXITY_API_KEY') || '';
 }
 
-// api_key 검증 (웹 앱은 헤더 미지원 → 쿼리/parameter 사용)
-function validateApiKey(request) {
-  const apiKey = (request.parameter && request.parameter.api_key) ||
-    (request.headers && (request.headers['x-api-key'] || request.headers['X-Api-Key']));
-  const expectedKey = getApiKey();
-  
-  if (!expectedKey || apiKey !== expectedKey) {
-    return {
-      success: false,
-      error: '인증 실패'
-    };
-  }
-  return null;
-}
-
 // Google Sheets에서 데이터 가져오기
 function getSheetData(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -346,6 +331,19 @@ function verifyRegisterPassword(requestData) {
       }
     };
   }
+}
+
+// POST /admin-verify - 관리자 비밀번호 검증
+function verifyAdminPassword(requestData) {
+  const password = String(requestData.password || '');
+  const configs = getSheetData('config');
+  const pwConfig = configs.find(c => c.key === 'admin_password');
+  const dbValue = pwConfig ? pwConfig.value : 'admin1234';
+  const correctPassword = String(dbValue);
+  if (password === correctPassword) {
+    return { success: true };
+  }
+  return { success: false, error: '비밀번호가 일치하지 않습니다.' };
 }
 
 // GET /daily-recommendations - 오늘의 추천 조회
@@ -707,13 +705,6 @@ function handleRequest(e) {
       parameterMethod: request.parameter.method
     });
     
-    // 인증 검증
-    const authError = validateApiKey(request);
-    if (authError) {
-      return ContentService.createTextOutput(JSON.stringify(authError))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    
     let result;
     
     // 라우팅
@@ -764,6 +755,9 @@ function handleRequest(e) {
     } else if (path === 'verify-register-password' && httpMethod === 'POST') {
       const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
       result = verifyRegisterPassword(requestData);
+    } else if (path === 'admin-verify' && httpMethod === 'POST') {
+      const requestData = e.postData ? JSON.parse(e.postData.contents) : {};
+      result = verifyAdminPassword(requestData);
     } else {
       // 더 구체적인 에러 메시지 제공
       const debugInfo = {

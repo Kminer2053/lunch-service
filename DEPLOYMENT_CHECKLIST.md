@@ -1,11 +1,16 @@
 # 배포 체크리스트
 
+## 아키텍처 요약
+
+- **CRUD**: 프론트엔드 → Apps Script 직접 호출 (server.js 경유 없음)
+- **외부 API**: 프론트엔드 → server.js(프록시) → Naver/NCP/TMAP
+
 ## 배포 전 확인사항
 
 ### 코드 변경사항 확인
-- [ ] `server.js`: PUT/DELETE를 POST로 변환하는 로직 추가됨
-- [ ] `apps-script-template.js`: PUT/DELETE 라우팅 로직 개선 및 디버깅 로그 추가
-- [ ] `lunch.js`: 태그 입력 버그 수정, 비밀번호 모달 개선
+- [ ] `apps-script-template.js`: API 키 검증 제거, admin-verify 경로 추가
+- [ ] `lunch.js`: CRUD는 callAppsScript(APPS_SCRIPT_URL) 직접 호출, 외부 API만 API_BASE_URL 사용
+- [ ] `server.js`: 점심 CRUD 프록시 제거, search-place / geocode-address / static-map 만 유지
 - [ ] 모든 변경사항이 커밋되어 있음
 
 ## 배포 순서
@@ -25,23 +30,13 @@
 
 **배포 확인**:
 - [ ] GitHub Actions 워크플로우가 성공적으로 완료됨
-- [ ] Apps Script 편집기에서 코드 변경사항 확인
-- [ ] Apps Script 실행 로그에서 디버깅 메시지 확인 가능
-- [ ] **웹앱 재배포 확인**: GitHub Actions 로그에서 배포 URL 확인
-  - [ ] `clasp version`이 성공적으로 실행됨
-  - [ ] `clasp deploy`가 성공적으로 실행됨
-  - [ ] 배포 URL이 출력되었는지 확인 (예: `https://script.google.com/macros/s/.../exec`)
-  - [ ] Render의 `GOOGLE_APPS_SCRIPT_URL` 환경변수가 배포 URL과 일치하는지 확인
-    - Render 대시보드 → 환경변수 → `GOOGLE_APPS_SCRIPT_URL` 값 확인
-    - 배포 URL과 정확히 일치해야 함 (마지막에 `/exec` 포함)
+- [ ] 배포 URL 확인 (예: `https://script.google.com/macros/s/.../exec`)
+- [ ] **프론트엔드(Vercel)에 배포 URL 설정**: `APPS_SCRIPT_URL`에 위 URL 설정 (index.html 또는 Vercel 환경변수로 주입)
 
 **주요 변경사항**:
-- PUT/DELETE 요청이 POST로 변환되어 오는 경우도 처리하도록 라우팅 로직 수정
-- 디버깅을 위한 로그 추가 (`console.log('Apps Script 요청:', ...)`)
-- 에러 메시지 개선 (경로와 메서드 정보 포함)
-- **자동 웹앱 재배포**: `clasp push` 후 `clasp version` 및 `clasp deploy` 자동 실행
-  - `CLASP_DEPLOYMENT_ID` secret이 설정되어 있으면 기존 배포 업데이트
-  - 없으면 새 배포 생성 (배포 ID를 로그에 출력하여 다음 배포에 사용 가능)
+- API 키 검증 제거 (프론트엔드 직접 호출, 웹앱 "모든 사용자" 접근)
+- admin-verify 경로 추가 (관리자 비밀번호 검증)
+- PUT/DELETE는 쿼리 파라미터 `method`로 구분
 
 ### 2단계: 백엔드 배포 (Render)
 
@@ -56,20 +51,21 @@
 
 **배포 확인**:
 - [ ] Render 배포 로그에서 에러 없이 빌드 완료 확인
-- [ ] 서버가 정상적으로 시작되었는지 확인 (로그에서 "Server running" 메시지 확인)
-- [ ] 환경변수 설정 확인:
-  - [ ] `GOOGLE_APPS_SCRIPT_URL` 설정됨
-    - **중요**: 이 값이 Apps Script 웹앱 배포 URL과 정확히 일치해야 함
-    - 형식: `https://script.google.com/macros/s/{DEPLOYMENT_ID}/exec`
-    - GitHub Actions 배포 로그에서 확인한 배포 URL과 비교
-  - [ ] `LUNCH_API_KEY` 설정됨 (Apps Script의 `API_KEY`와 동일해야 함)
-  - [ ] 기타 필요한 환경변수 설정됨
+- [ ] 환경변수 확인 (점심 서비스 **외부 API 프록시**용만 필요):
+  - [ ] `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` (지역 검색)
+  - [ ] `NCP_APIGW_API_KEY_ID` / `NCP_APIGW_API_KEY` (지오코딩, 정적 지도)
+  - [ ] `TMAP_API_KEY` (도보 거리)
+  - ~~`GOOGLE_APPS_SCRIPT_URL`~~, ~~`LUNCH_API_KEY`~~ → CRUD는 프론트에서 Apps Script 직접 호출하므로 불필요
 
 **주요 변경사항**:
-- `callAppsScript` 함수에서 PUT/DELETE 요청을 POST로 변환하는 로직 추가
-- 변환된 요청도 body를 전달하도록 수정
+- 점심 CRUD 관련 엔드포인트 제거 (places, config, upload-image, verify 등)
+- 유지: `/lunch/search-place`, `/lunch/geocode-address`, `/lunch/static-map` 만
 
 ### 3단계: 프론트엔드 배포 (Vercel)
+
+**필수 설정**:
+- 배포된 Apps Script 웹앱 URL을 프론트엔드에 전달해야 함. `index.html`의 `window.APPS_SCRIPT_URL` 또는 Vercel 환경변수로 빌드 시 주입.
+- `window.API_BASE_URL`: Render 등 외부 API 프록시 URL.
 
 **자동 배포**:
 - `lunch-service` 폴더의 변경사항이 자동으로 배포됨
@@ -110,8 +106,8 @@
 3. Apps Script 편집기에서 수동으로 코드 확인
 4. **웹앱 배포 URL 불일치 문제**:
    - 증상: "알 수 없는 엔드포인트" 에러가 계속 발생
-   - 확인: Render의 `GOOGLE_APPS_SCRIPT_URL`이 최신 배포 URL과 일치하는지 확인
-   - 해결: GitHub Actions 배포 로그에서 배포 URL 확인 후 Render 환경변수 업데이트
+   - 확인: 프론트엔드(Vercel/index.html)의 `APPS_SCRIPT_URL`이 최신 배포 URL과 일치하는지 확인
+   - 해결: GitHub Actions 배포 로그에서 배포 URL 확인 후 Vercel 환경변수 또는 index.html의 `window.APPS_SCRIPT_URL` 업데이트
    - 또는 `clasp deployments` 명령으로 현재 배포 목록 확인
 
 ### 백엔드 배포 실패
