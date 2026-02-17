@@ -48,6 +48,89 @@ function migrateIndoorToReservation() {
   return '✅ 마이그레이션 완료: indoor_ok → reservation_ok';
 }
 
+// 기상청 API 테스트 함수
+function testWeatherAPI() {
+  const apiKey = '59c12627231e31f0c49b608447cbafdb00eeea0a469b5d1338b7268f03bcf0fb';
+  const lat = 37.5264; // 서울 영등포구
+  const lon = 126.8962;
+  
+  try {
+    // 격자 좌표로 변환
+    const grid = convertToGrid(lat, lon);
+    Logger.log(`격자 좌표: nx=${grid.nx}, ny=${grid.ny}`);
+    
+    // 현재 시간 기준
+    const now = new Date();
+    const baseDate = Utilities.formatDate(now, 'Asia/Seoul', 'yyyyMMdd');
+    const baseTime = '0200'; // 02시 기준
+    
+    // 기상청 초단기실황 API 테스트
+    const url = `http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${encodeURIComponent(apiKey)}&pageNo=1&numOfRows=10&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${grid.nx}&ny=${grid.ny}`;
+    
+    Logger.log(`API URL: ${url}`);
+    
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    const statusCode = response.getResponseCode();
+    const responseText = response.getContentText();
+    
+    Logger.log(`응답 상태 코드: ${statusCode}`);
+    Logger.log(`응답 내용: ${responseText.substring(0, 500)}`);
+    
+    if (statusCode === 200) {
+      const data = JSON.parse(responseText);
+      
+      if (data.response && data.response.body) {
+        if (data.response.body.items && data.response.body.items.item) {
+          const items = data.response.body.items.item;
+          Logger.log(`데이터 항목 수: ${items.length}`);
+          
+          items.forEach(item => {
+            Logger.log(`${item.category}: ${item.obsrValue} (${item.baseDate} ${item.baseTime})`);
+          });
+          
+          // 날씨 정보 파싱 테스트
+          const weatherInfo = getWeatherInfo();
+          Logger.log(`파싱된 날씨 정보: ${JSON.stringify(weatherInfo)}`);
+          
+          return {
+            success: true,
+            message: 'API 정상 작동',
+            grid: grid,
+            items: items,
+            parsed: weatherInfo
+          };
+        } else {
+          Logger.log('응답 구조: ' + JSON.stringify(data.response.body, null, 2).substring(0, 1000));
+          return {
+            success: false,
+            message: '데이터 항목이 없습니다',
+            response: data.response.body
+          };
+        }
+      } else {
+        return {
+          success: false,
+          message: '응답 구조가 예상과 다릅니다',
+          response: data
+        };
+      }
+    } else {
+      return {
+        success: false,
+        message: `HTTP ${statusCode} 오류`,
+        response: responseText.substring(0, 500)
+      };
+    }
+  } catch (error) {
+    Logger.log(`에러 발생: ${error.toString()}`);
+    return {
+      success: false,
+      message: '에러 발생',
+      error: error.toString()
+    };
+  }
+}
+
 // 권한 확인 함수 (테스트용)
 function checkPermissions() {
   var results = [];
@@ -695,7 +778,11 @@ function convertToGrid(lat, lon) {
 function getWeatherInfo() {
   try {
     // 공공데이터포털 기상청 API 키 (스크립트 속성에서 가져오기)
-    const apiKey = PropertiesService.getScriptProperties().getProperty('KMA_API_KEY');
+    let apiKey = PropertiesService.getScriptProperties().getProperty('KMA_API_KEY');
+    // 테스트용: 인증키가 없으면 하드코딩된 키 사용 (개발/테스트 전용)
+    if (!apiKey) {
+      apiKey = '59c12627231e31f0c49b608447cbafdb00eeea0a469b5d1338b7268f03bcf0fb';
+    }
     if (!apiKey) {
       return { description: '날씨 정보 없음', temp: null };
     }
