@@ -834,6 +834,8 @@ async function verifyAdmin() {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.getElementById('admin-tab').classList.add('active');
+            const banner = document.getElementById('lunch-affiliate-banner');
+            if (banner) banner.style.display = 'none';
             await loadAdminData();
             showToast('관리자 인증 완료');
         } else {
