@@ -16,6 +16,9 @@
 | `LUNCH_WEB_URL` | 점심 웹 앱 주소 (카카오봇 메시지에 링크로 넣을 때 사용) | `https://lunch-service.vercel.app` |
 | `LUNCH_API_KEY` | (선택) Apps Script에서 x-api-key 검증 시 사용. 검증 안 쓰면 비워도 됨 | 32자 이상 랜덤 문자열 |
 
+**일일 추천 크론**: Render에 `LUNCH_DAILY_CRON` 환경변수는 **넣지 않아도 됩니다.**  
+점심 서비스 관리자 화면(관리자 → 일일 추천 스케줄)에서 Cron 표현식을 입력하고 저장하면, 서버가 Apps Script config에서 `cron_time`을 읽어 자동 반영합니다. (저장 시 서버에 즉시 반영)
+
 ### Apps Script에서 API 키 검증을 사용하는 경우
 
 - Render에 `LUNCH_API_KEY` 설정
@@ -42,7 +45,8 @@
 
 **요약**:  
 - **반드시 넣을 것**: `GOOGLE_APPS_SCRIPT_URL`, `LUNCH_WEB_URL`  
-- **선택**: `LUNCH_API_KEY` (Apps Script 인증 시), 네이버/NCP/TMAP (해당 기능 사용 시)
+- **선택**: `LUNCH_API_KEY` (Apps Script 인증 시), 네이버/NCP/TMAP (해당 기능 사용 시)  
+- **넣지 않아도 됨**: `LUNCH_DAILY_CRON` (일일 추천 스케줄은 관리자 화면에서 설정)
 
 ---
 

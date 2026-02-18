@@ -263,7 +263,7 @@
                                 <input type="text" id="admin-cron-time" placeholder="0 10 * * 1-5">
                                 <button type="button" class="btn-sm" id="btn-save-cron">저장</button>
                             </div>
-                            <p class="form-hint">예: "0 10 * * 1-5" = 평일 오전 10시</p>
+                            <p class="form-hint">예: "0 10 * * 1-5" = 평일 오전 10시. 저장하면 서버에 자동 반영됩니다.</p>
                         </div>
                         <button type="button" class="btn-primary btn-full" id="btn-generate-daily">
                             <i data-lucide="refresh-cw" class="btn-icon"></i> 수동 추천 생성
@@ -277,6 +277,13 @@
                 </div>
             </div>
         </main>
+
+        <!-- 쿠팡 파트너스 다이나믹 배너 (추천/목록 탭에서만 노출) -->
+        <div id="lunch-affiliate-banner" class="affiliate-banner">
+            <!-- 쿠팡 파트너스에서 발급한 다이나믹 배너 스크립트 또는 iframe 코드를 아래에 넣으세요 -->
+            <div id="coupang-banner-slot"></div>
+            <p class="affiliate-disclaimer">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+        </div>
 
         <!-- 하단 탭바 -->
         <nav class="tab-bar">

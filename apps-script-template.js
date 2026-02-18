@@ -263,26 +263,22 @@ function generateId(prefix) {
   return prefix + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
-// GET /places - 장소 목록 조회
+// GET /places - 장소 목록 조회 (리뷰 시트 1회 읽기 + 메모리 집계로 N+1 제거)
 function getPlaces() {
   const places = getSheetData('places');
-  // 각 장소에 리뷰 카운트 추가 및 indoor_ok → reservation_ok 호환성 처리
-  const placesWithReviews = places.map(place => {
-    // 호환성: indoor_ok가 있으면 reservation_ok로 매핑 (마이그레이션 전용)
+  const reviews = getSheetData('reviews');
+  const statsByPlace = aggregateAllReviews(reviews);
+  const placesWithReviews = places.map(function(place) {
     if (place.indoor_ok !== undefined && place.reservation_ok === undefined) {
       place.reservation_ok = place.indoor_ok;
     }
-    const reviewStats = aggregateReviews(place.place_id);
-    return {
-      ...place,
+    var reviewStats = statsByPlace[place.place_id] || { good: 0, bad: 0 };
+    return Object.assign({}, place, {
       review_good: reviewStats.good || 0,
       review_bad: reviewStats.bad || 0
-    };
+    });
   });
-  return {
-    success: true,
-    data: placesWithReviews
-  };
+  return { success: true, data: placesWithReviews };
 }
 
 // POST /places - 새 장소 등록
@@ -624,35 +620,39 @@ function createReview(requestData) {
   };
 }
 
-// 리뷰 집계 (place_id별)
+// 리뷰 전체 1회 읽고 place_id별로 집계 (N+1 방지)
+function aggregateAllReviews(reviewsRows) {
+  const byPlace = {};
+  for (var i = 0; i < reviewsRows.length; i++) {
+    var r = reviewsRows[i];
+    var pid = r.place_id || '';
+    if (!byPlace[pid]) {
+      byPlace[pid] = { total: 0, good: 0, bad: 0, neutral: 0, average: 0 };
+    }
+    byPlace[pid].total++;
+    if (r.verdict === 'good') byPlace[pid].good++;
+    else if (r.verdict === 'bad') byPlace[pid].bad++;
+    else byPlace[pid].neutral++;
+  }
+  for (var placeId in byPlace) {
+    var o = byPlace[placeId];
+    o.average = o.total > 0 ? (o.good * 1 + o.neutral * 0.5) / o.total : 0;
+  }
+  return byPlace;
+}
+
+// 단일 place_id 리뷰 집계 (호환용; 가능하면 aggregateAllReviews 사용)
 function aggregateReviews(placeId) {
   const reviews = getSheetData('reviews');
-  const placeReviews = reviews.filter(r => r.place_id === placeId);
-  
+  const placeReviews = reviews.filter(function(r) { return r.place_id === placeId; });
   if (placeReviews.length === 0) {
-    return {
-      total: 0,
-      good: 0,
-      bad: 0,
-      neutral: 0,
-      average: 0
-    };
+    return { total: 0, good: 0, bad: 0, neutral: 0, average: 0 };
   }
-  
-  const good = placeReviews.filter(r => r.verdict === 'good').length;
-  const bad = placeReviews.filter(r => r.verdict === 'bad').length;
-  const neutral = placeReviews.filter(r => r.verdict === 'neutral').length;
-  
-  // 평균 점수 계산 (good=1, neutral=0.5, bad=0)
-  const average = (good * 1 + neutral * 0.5) / placeReviews.length;
-  
-  return {
-    total: placeReviews.length,
-    good: good,
-    bad: bad,
-    neutral: neutral,
-    average: average
-  };
+  var good = placeReviews.filter(function(r) { return r.verdict === 'good'; }).length;
+  var bad = placeReviews.filter(function(r) { return r.verdict === 'bad'; }).length;
+  var neutral = placeReviews.filter(function(r) { return r.verdict === 'neutral'; }).length;
+  var average = (good * 1 + neutral * 0.5) / placeReviews.length;
+  return { total: placeReviews.length, good: good, bad: bad, neutral: neutral, average: average };
 }
 
 // 규칙 기반 점수 계산
@@ -686,11 +686,13 @@ function recommendLunch(requestData) {
   
   // text는 선택사항 (없으면 일반 추천)
   
-  // 1. 모든 장소 가져오기
+  // 1. 모든 장소 + 리뷰 1회 읽기
   const places = getSheetData('places');
+  const reviews = getSheetData('reviews');
+  const statsByPlace = aggregateAllReviews(reviews);
   
   // 호환성: indoor_ok → reservation_ok 매핑
-  const placesNormalized = places.map(place => {
+  const placesNormalized = places.map(function(place) {
     if (place.indoor_ok !== undefined && place.reservation_ok === undefined) {
       place.reservation_ok = place.indoor_ok;
     }
@@ -698,18 +700,14 @@ function recommendLunch(requestData) {
   });
   
   // 2. 제외 목록 필터링
-  const filteredPlaces = placesNormalized.filter(p => !exclude.includes(p.place_id));
+  const filteredPlaces = placesNormalized.filter(function(p) { return exclude.indexOf(p.place_id) === -1; });
   
-  // 3. 리뷰 집계 및 점수 계산
-  const scoredPlaces = filteredPlaces.map(place => {
-    const reviewStats = aggregateReviews(place.place_id);
+  // 3. 리뷰 집계 및 점수 계산 (메모리 집계 사용)
+  const defaultStats = { total: 0, good: 0, bad: 0, neutral: 0, average: 0 };
+  const scoredPlaces = filteredPlaces.map(function(place) {
+    const reviewStats = statsByPlace[place.place_id] || defaultStats;
     const score = calculateScore(place, preset, reviewStats);
-    
-    return {
-      ...place,
-      reviewStats: reviewStats,
-      score: score
-    };
+    return Object.assign({}, place, { reviewStats: reviewStats, score: score });
   });
   
   // 4. 좋아요 수 기준으로 정렬하여 상위 30개 shortlist 생성

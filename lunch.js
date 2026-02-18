@@ -84,6 +84,9 @@ function activateTab(targetTab, tabButtons, tabContents) {
     const targetBtn = document.querySelector(`.tab-btn[data-tab="${targetTab}"]`);
     if (targetBtn) targetBtn.classList.add('active');
     document.getElementById(targetTab)?.classList.add('active');
+    // 추천/목록 탭에서만 제휴 배너 표시
+    const banner = document.getElementById('lunch-affiliate-banner');
+    if (banner) banner.style.display = (targetTab === 'recommend-tab' || targetTab === 'list-tab') ? 'block' : 'none';
 }
 
 // ===== 암호 모달 =====
@@ -1081,8 +1084,18 @@ async function saveConfig(key, value) {
     showLoading(true);
     try {
         const data = await callAppsScript('config', 'POST', { key, value });
-        if (data.success) showToast('저장 완료');
-        else showToast('저장 실패');
+        if (data.success) {
+            showToast('저장 완료');
+            // 크론 시간 저장 시 서버에 반영 요청 (관리자 화면 설정이 자동 적용되도록)
+            if (key === 'cron_time' && API_BASE_URL && !String(API_BASE_URL).startsWith('__')) {
+                try {
+                    const base = API_BASE_URL.replace(/\/$/, '');
+                    const res = await fetch(`${base}/lunch/admin/reload-daily-cron`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                    const json = await res.json();
+                    if (json.success && json.cron) showToast('저장 완료. 서버 스케줄 반영됨: ' + json.cron);
+                } catch (e) { /* 서버 반영 실패해도 저장은 완료됨 */ }
+            }
+        } else showToast('저장 실패');
     } catch (e) { showToast('저장 중 오류'); }
     finally { showLoading(false); }
 }
