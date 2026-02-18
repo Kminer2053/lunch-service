@@ -511,7 +511,25 @@ async function selectSearchResult(item) {
             document.getElementById('place-category').value = selectedCategory;
         }
 
-        document.getElementById('place-name').value = item.name || '';
+        const placeName = item.name || '';
+        if (!placeName) {
+            showToast('상호명 정보가 없습니다.');
+            return;
+        }
+
+        // 중복 상호명 체크
+        const placesData = await callAppsScript('places', 'GET');
+        if (placesData.success && placesData.data) {
+            const duplicatePlace = placesData.data.find(p => 
+                p.name && p.name.trim().toLowerCase() === placeName.trim().toLowerCase()
+            );
+            if (duplicatePlace) {
+                showToast('이미 등록되어 있는 상점입니다.');
+                return;
+            }
+        }
+
+        document.getElementById('place-name').value = placeName;
         document.getElementById('place-address').value = item.address_text || '';
 
         if (item.naver_link) {

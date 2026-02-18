@@ -210,30 +210,68 @@ function getPerplexityApiKey() {
   return props.getProperty('PERPLEXITY_API_KEY') || '';
 }
 
-// Google Sheets에서 데이터 가져오기
+// 캐시 (CacheService): 읽기 성능 개선, CUD 시 무효화
+var CACHE_TTL_SECONDS = 600;
+
+function getCached(key) {
+  var raw = CacheService.getScriptCache().get(key);
+  if (raw == null) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
+function setCached(key, value) {
+  CacheService.getScriptCache().put(key, JSON.stringify(value), CACHE_TTL_SECONDS);
+}
+
+function invalidateCacheFor(sheetName) {
+  var cache = CacheService.getScriptCache();
+  if (sheetName === 'daily_recommendations') {
+    var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
+    cache.remove('lunch_daily_' + today);
+  } else {
+    cache.remove('lunch_' + sheetName);
+  }
+}
+
+// Google Sheets에서 데이터 가져오기 (places/reviews/config는 캐시 사용)
 function getSheetData(sheetName) {
+  var cacheKey = 'lunch_' + sheetName;
+  if (sheetName === 'places' || sheetName === 'reviews' || sheetName === 'config') {
+    var cached = getCached(cacheKey);
+    if (cached != null) return cached;
+  }
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
-  
+
   if (!sheet) {
     return [];
   }
-  
+
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) {
     return [];
   }
-  
+
   const headers = data[0];
   const rows = data.slice(1);
-  
-  return rows.map(row => {
+
+  var result = rows.map(row => {
     const obj = {};
     headers.forEach((header, index) => {
       obj[header] = row[index] || '';
     });
     return obj;
   });
+
+  if (sheetName === 'places' || sheetName === 'reviews' || sheetName === 'config') {
+    setCached(cacheKey, result);
+  }
+  return result;
 }
 
 // Google Sheets에 데이터 추가
@@ -283,12 +321,27 @@ function getPlaces() {
 
 // POST /places - 새 장소 등록
 function createPlace(requestData) {
+  const newName = (requestData.name || '').trim();
+  if (!newName) {
+    return { success: false, error: '상호명을 입력해주세요.' };
+  }
+  
+  // 중복 상호명 체크
+  const places = getSheetData('places');
+  const duplicatePlace = places.find(function(place) {
+    return place.name && place.name.trim().toLowerCase() === newName.toLowerCase();
+  });
+  
+  if (duplicatePlace) {
+    return { success: false, error: '이미 등록되어 있는 상점입니다.' };
+  }
+  
   const placeId = generateId('place');
   const now = new Date().toISOString();
   
   const placeData = {
     place_id: placeId,
-    name: requestData.name || '',
+    name: newName,
     address_text: requestData.address_text || '',
     naver_map_url: requestData.naver_map_url || '',
     category: requestData.category || '',
@@ -306,7 +359,7 @@ function createPlace(requestData) {
   };
   
   appendSheetData('places', placeData);
-  
+  invalidateCacheFor('places');
   return {
     success: true,
     data: {
@@ -359,7 +412,7 @@ function updatePlace(placeId, requestData) {
       if (updatedAtCol !== -1) {
         sheet.getRange(row, updatedAtCol + 1).setValue(now);
       }
-      
+      invalidateCacheFor('places');
       return { success: true, data: { place_id: placeId, updated_at: now } };
     }
   }
@@ -398,6 +451,8 @@ function deletePlace(placeId) {
   for (let i = data.length - 1; i >= 1; i--) {
     if (data[i][idCol] === placeId) {
       sheet.deleteRow(i + 1);
+      invalidateCacheFor('reviews');
+      invalidateCacheFor('places');
       return { success: true };
     }
   }
@@ -425,10 +480,12 @@ function updateConfig(requestData) {
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === key) {
       sheet.getRange(i + 1, 2).setValue(value);
+      invalidateCacheFor('config');
       return { success: true, data: { key: key, value: value } };
     }
   }
   sheet.appendRow([key, value]);
+  invalidateCacheFor('config');
   return { success: true, data: { key: key, value: value } };
 }
 
@@ -476,6 +533,7 @@ function uploadImage(requestData) {
             }
           }
         }
+        invalidateCacheFor('places');
       }
     }
     return { success: true, data: { image_url: imageUrl, file_id: fileId } };
@@ -528,12 +586,16 @@ function verifyAdminPassword(requestData) {
   return { success: false, error: '비밀번호가 일치하지 않습니다.' };
 }
 
-// GET /daily-recommendations - 오늘의 추천 조회
+// GET /daily-recommendations - 오늘의 추천 조회 (캐시 사용)
 function getDailyRecommendations() {
+  var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
+  var cacheKey = 'lunch_daily_' + today;
+  var cached = getCached(cacheKey);
+  if (cached != null) return { success: true, data: cached };
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('daily_recommendations');
   if (!sheet) return { success: true, data: null };
-  var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
   var data = sheet.getDataRange().getValues();
   if (data.length < 2) return { success: true, data: null };
   var headers = data[0];
@@ -548,6 +610,7 @@ function getDailyRecommendations() {
     if (String(rowDate) === today) {
       try {
         var recs = JSON.parse(data[i][jsonCol]);
+        setCached(cacheKey, recs);
         return { success: true, data: recs };
       } catch (e) {
         return { success: true, data: null };
@@ -586,6 +649,7 @@ function generateDaily(requestData) {
   if (!replaced) {
     sheet.appendRow([today, JSON.stringify(result.data), new Date().toISOString()]);
   }
+  invalidateCacheFor('daily_recommendations');
   return { success: true, data: result.data };
 }
 
@@ -610,7 +674,7 @@ function createReview(requestData) {
   };
   
   appendSheetData('reviews', reviewData);
-  
+  invalidateCacheFor('reviews');
   return {
     success: true,
     data: {
