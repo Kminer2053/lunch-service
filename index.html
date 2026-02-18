@@ -271,6 +271,20 @@
                     </div>
 
                     <div class="admin-card">
+                        <h4><i data-lucide="map-pin" class="admin-icon"></i> 도보 거리 기준 위치 (회사)</h4>
+                        <div class="form-group">
+                            <label for="admin-company-lat">위도</label>
+                            <input type="text" id="admin-company-lat" placeholder="37.5245" inputmode="decimal">
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-company-lng">경도</label>
+                            <input type="text" id="admin-company-lng" placeholder="126.9065" inputmode="decimal">
+                        </div>
+                        <p class="form-hint">도보 시간 계산의 출발점입니다. 비워두면 기본값(37.5245, 126.9065)이 사용됩니다.</p>
+                        <button type="button" class="btn-sm" id="btn-save-company-location">저장</button>
+                    </div>
+
+                    <div class="admin-card">
                         <h4><i data-lucide="list" class="admin-icon"></i> 등록 장소 관리</h4>
                         <div id="admin-places-list" class="admin-places-list"></div>
                     </div>

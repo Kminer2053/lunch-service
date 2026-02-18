@@ -858,6 +858,7 @@ function initAdmin() {
         saveConfig('register_password', document.getElementById('admin-register-pw').value);
     document.getElementById('btn-save-cron').onclick = () =>
         saveConfig('cron_time', document.getElementById('admin-cron-time').value);
+    document.getElementById('btn-save-company-location').onclick = () => saveCompanyLocation();
     document.getElementById('btn-generate-daily').onclick = generateDailyManual;
 }
 
@@ -892,8 +893,14 @@ async function loadAdminData() {
             const configs = Array.isArray(data.data) ? data.data : [];
             const regPw = configs.find(c => c.key === 'register_password');
             const cron = configs.find(c => c.key === 'cron_time');
+            const companyLat = configs.find(c => c.key === 'company_lat');
+            const companyLng = configs.find(c => c.key === 'company_lng');
             if (regPw) document.getElementById('admin-register-pw').value = regPw.value || '';
             if (cron) document.getElementById('admin-cron-time').value = cron.value || '';
+            const latEl = document.getElementById('admin-company-lat');
+            const lngEl = document.getElementById('admin-company-lng');
+            if (latEl) latEl.value = companyLat ? (companyLat.value || '') : '';
+            if (lngEl) lngEl.value = companyLng ? (companyLng.value || '') : '';
         }
     } catch (e) { /* silent */ }
 
@@ -1138,6 +1145,27 @@ async function saveConfig(key, value) {
         } else showToast('저장 실패');
     } catch (e) { showToast('저장 중 오류'); }
     finally { showLoading(false); }
+}
+
+async function saveCompanyLocation() {
+    const latVal = document.getElementById('admin-company-lat').value.trim();
+    const lngVal = document.getElementById('admin-company-lng').value.trim();
+    showLoading(true);
+    try {
+        await callAppsScript('config', 'POST', { key: 'company_lat', value: latVal || '' });
+        await callAppsScript('config', 'POST', { key: 'company_lng', value: lngVal || '' });
+        showToast('저장 완료');
+        if (API_BASE_URL && !String(API_BASE_URL).startsWith('__')) {
+            try {
+                const base = API_BASE_URL.replace(/\/$/, '');
+                await fetch(`${base}/lunch/admin/reload-origin`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+            } catch (e) { /* 서버 반영 실패해도 저장은 완료됨 */ }
+        }
+    } catch (e) {
+        showToast('저장 중 오류');
+    } finally {
+        showLoading(false);
+    }
 }
 
 async function generateDailyManual() {
