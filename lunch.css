@@ -305,37 +305,44 @@ body {
 /* ===== 제휴 배너 (탭바 바로 위, 플로팅 고정) ===== */
 .affiliate-banner {
     position: fixed;
-    bottom: 65px; /* 탭바 높이와 동일한 간격으로 탭바 바로 위 고정 */
+    bottom: 56px; /* 탭바 높이에 딱 붙이기 (탭바 실제 높이: ~56px) */
     left: 50%;
     transform: translateX(-50%);
     width: 100%;
     max-width: 420px;
-    height: 90px;
-    padding: 8px 16px 10px;
+    padding: 6px 16px 6px;
     background: var(--bg-light);
     border-top: 1px solid var(--border);
+    border-bottom: none;
     box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
     z-index: 99;
     text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    gap: 4px;
+}
+.affiliate-banner .affiliate-disclaimer-top {
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.3;
+    margin: 0;
+    padding: 0;
 }
 .affiliate-banner #coupang-banner-slot {
-    flex: 1;
-    min-height: 50px;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 100%;
+    margin: 0;
 }
 .affiliate-banner .affiliate-disclaimer {
     font-size: 10px;
     color: var(--text-muted);
-    margin-top: 4px;
+    margin: 0;
+    padding: 0;
     line-height: 1.3;
-    flex-shrink: 0;
 }
 
 /* ===== 하단 탭바 ===== */
@@ -345,6 +352,7 @@ body {
     border-top: 1px solid var(--border); display: flex; justify-content: space-around;
     padding: 6px 0 env(safe-area-inset-bottom, 8px);
     box-shadow: 0 -2px 12px rgba(0,0,0,0.06); z-index: 100;
+    margin-top: 0; /* 배너와 딱 붙이기 */
 }
 .tab-btn {
     display: flex; flex-direction: column; align-items: center; gap: 2px;
