@@ -196,6 +196,18 @@ async function requestRecommendation(text, preset = [], exclude = []) {
 
 async function loadDailyRecommendations() {
     try {
+        // places가 없으면 먼저 로드 (place_id로 이미지를 찾기 위해 필요)
+        if (!window.allPlaces || window.allPlaces.length === 0) {
+            try {
+                const placesData = await callAppsScript('places', 'GET');
+                if (placesData.success && placesData.data) {
+                    window.allPlaces = placesData.data;
+                }
+            } catch (e) {
+                console.warn('일일 추천 표시를 위한 places 로드 실패:', e);
+            }
+        }
+        
         const data = await callAppsScript('daily-recommendations', 'GET');
         if (data.success && data.data && data.data.length > 0) {
             const section = document.getElementById('daily-section');
@@ -224,7 +236,15 @@ function bindImageErrorHandlers(container) {
 function displayRecommendations(recommendations, containerId) {
     const container = document.getElementById(containerId);
     container.innerHTML = recommendations.map((place, index) => {
-        const imageUrl = getDisplayImageUrl(place.image_url);
+        // place_id가 있고 image_url이 없으면 allPlaces에서 찾아서 사용
+        let imageUrl = place.image_url;
+        if (!imageUrl && place.place_id && window.allPlaces) {
+            const placeFromDb = window.allPlaces.find(p => p.place_id === place.place_id);
+            if (placeFromDb && placeFromDb.image_url) {
+                imageUrl = placeFromDb.image_url;
+            }
+        }
+        imageUrl = getDisplayImageUrl(imageUrl);
         const imgHtml = imageUrl
             ? `<div class="place-card-img-wrapper"><img class="place-card-img" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(place.name)}" referrerpolicy="no-referrer"><div class="place-card-img-placeholder" style="display:none"><i data-lucide="utensils-crossed"></i></div></div>`
             : '<div class="place-card-img-wrapper"><div class="place-card-img-placeholder"><i data-lucide="utensils-crossed"></i></div></div>';
