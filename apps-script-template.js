@@ -586,6 +586,38 @@ function verifyAdminPassword(requestData) {
   return { success: false, error: '비밀번호가 일치하지 않습니다.' };
 }
 
+// 전일자 일일 추천에 포함된 place_id 목록 반환 (추천 후보에서 제외용)
+function getYesterdayDailyPlaceIds() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('daily_recommendations');
+  if (!sheet) return [];
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return [];
+  var headers = data[0];
+  var dateCol = headers.indexOf('date');
+  var jsonCol = headers.indexOf('recommendations_json');
+  if (dateCol === -1 || jsonCol === -1) return [];
+  var yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  var yesterdayStr = Utilities.formatDate(yesterday, 'Asia/Seoul', 'yyyy-MM-dd');
+  for (var i = data.length - 1; i >= 1; i--) {
+    var rowDate = data[i][dateCol];
+    if (typeof rowDate === 'object' && rowDate.getTime) {
+      rowDate = Utilities.formatDate(rowDate, 'Asia/Seoul', 'yyyy-MM-dd');
+    }
+    if (String(rowDate) === yesterdayStr) {
+      try {
+        var recs = JSON.parse(data[i][jsonCol]);
+        if (Array.isArray(recs)) {
+          return recs.map(function(r) { return r.place_id; }).filter(Boolean);
+        }
+        return [];
+      } catch (e) { return []; }
+    }
+  }
+  return [];
+}
+
 // GET /daily-recommendations - 오늘의 추천 조회 (캐시 사용)
 function getDailyRecommendations() {
   var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
@@ -763,8 +795,10 @@ function recommendLunch(requestData) {
     return place;
   });
   
-  // 2. 제외 목록 필터링
-  const filteredPlaces = placesNormalized.filter(function(p) { return exclude.indexOf(p.place_id) === -1; });
+  // 2. 제외 목록 필터링 (사용자 제외 + 전일자 일일 추천에 포함된 장소)
+  const yesterdayPlaceIds = getYesterdayDailyPlaceIds();
+  const excludeAll = exclude.concat(yesterdayPlaceIds);
+  const filteredPlaces = placesNormalized.filter(function(p) { return excludeAll.indexOf(p.place_id) === -1; });
   
   // 3. 리뷰 집계 및 점수 계산 (메모리 집계 사용)
   const defaultStats = { total: 0, good: 0, bad: 0, neutral: 0, average: 0 };
@@ -774,14 +808,12 @@ function recommendLunch(requestData) {
     return Object.assign({}, place, { reviewStats: reviewStats, score: score });
   });
   
-  // 4. 좋아요 수 기준으로 정렬하여 상위 30개 shortlist 생성
+  // 4. 점수(거리, 프리셋, 리뷰 평균) 우선 정렬, 좋아요는 참고용으로만 (과잉 반영 방지)
   const shortlist = scoredPlaces
     .sort((a, b) => {
-      // 좋아요 수가 같으면 점수로 정렬
-      if (b.reviewStats.good !== a.reviewStats.good) {
-        return b.reviewStats.good - a.reviewStats.good;
-      }
-      return b.score - a.score;
+      if (b.score !== a.score) return b.score - a.score;
+      if (b.reviewStats.good !== a.reviewStats.good) return b.reviewStats.good - a.reviewStats.good;
+      return (b.reviewStats.total || 0) - (a.reviewStats.total || 0);
     })
     .slice(0, 30);
   
@@ -1004,17 +1036,17 @@ function callPerplexityAPI(text, shortlist, apiKey, weatherInfo, topCount = 3) {
   
   const prompt = `다음은 점심 식당 후보 목록입니다. ${userRequestText}
 
-${weatherText ? weatherText + '\n\n' : ''}후보 목록 (좋아요 수가 많은 상위 30개):
+${weatherText ? '**날씨 (최우선 고려):** ' + weatherText + '\n\n날씨에 맞는 메뉴와 분위기를 반드시 우선 고려하세요. (추운 날 → 따뜻한 국물, 맑은 날 → 산책하며 가기 좋은 곳 등)\n\n' : ''}후보 목록 (거리·점수·리뷰를 종합한 상위 30개):
 ${JSON.stringify(placesSummary, null, 2)}
 
 **중요 제약사항:**
 1. 반드시 위 후보 목록의 place_id만 사용해야 합니다.
 2. ${topCountText}를 선택하고, 각각에 대해 1문장으로 이유를 설명하세요.
-3. reason 작성 시 다음을 반드시 고려하세요:
-   - 카테고리(category): 한식, 일식, 중식, 양식, 카페 등
-   - 태그(tags): 가성비, 혼밥, 단체 등
-   - 좋아요 수(review_good): 많은 좋아요는 인기와 만족도를 나타냅니다
-   - 날씨: ${weatherText ? '현재 날씨를 고려하여 적합한 메뉴나 장소를 추천하세요.' : '날씨 정보가 없으므로 일반적인 추천을 하세요.'}
+3. reason 작성 시 고려 우선순위:
+   - (1순위) 날씨: ${weatherText ? '현재 날씨를 반드시 반영하여, 날씨에 어울리는 메뉴·장소를 추천하세요.' : '날씨 정보가 없으므로 일반적인 추천을 하세요.'}
+   - (2순위) 카테고리·태그: 사용자 요청과 맞는 음식 종류
+   - (3순위) 거리(walk_min): 가까운 곳 우선
+   - (참고) 좋아요/싫어요(review_good, review_bad): 참고만 할 것. 좋아요 1~2개에 과하게 의존하지 마세요.
 4. reason 작성 시 "혼밥가능", "단체가능", "예약가능" 같은 자연스러운 표현을 사용하세요. 필드명(solo_ok, group_ok 등)을 직접 사용하지 마세요.
 5. JSON 형식으로만 응답하세요.
 
