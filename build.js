@@ -18,8 +18,11 @@ html = html.replace(/__APPS_SCRIPT_URL__/g, APPS_SCRIPT_URL);
 html = html.replace(/__API_BASE_URL__/g, API_BASE_URL);
 fs.writeFileSync(path.join(dist, 'index.html'), html);
 
-['lunch.js', 'lunch.css'].forEach((file) => {
-  fs.copyFileSync(path.join(root, file), path.join(dist, file));
+['lunch.js', 'lunch.css', 'icon-192.png', 'manifest.json'].forEach((file) => {
+  const src = path.join(root, file);
+  if (fs.existsSync(src)) {
+    fs.copyFileSync(src, path.join(dist, file));
+  }
 });
 
 console.log('Build done. APPS_SCRIPT_URL:', APPS_SCRIPT_URL ? 'set' : '(empty)');

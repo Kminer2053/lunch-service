@@ -33,6 +33,7 @@ let registerAuthenticated = false;
 let editMode = false;
 let editingPlaceId = null;
 let placesData = []; // 관리자 페이지에서 사용할 장소 데이터
+let sessionRecommendResult = null; // 세션 내 개별 추천 결과 (추천 받기 클릭 시 저장, 새로고침 시 초기화)
 
 // 초기화
 document.addEventListener('DOMContentLoaded', () => {
@@ -182,16 +183,45 @@ async function requestRecommendation(text, preset = [], exclude = []) {
     try {
         const data = await callAppsScript('recommend', 'POST', { text, preset, exclude });
         if (data.success && data.data?.length > 0) {
-            displayRecommendations(data.data, 'recommend-results');
+            sessionRecommendResult = data.data;
+            renderRecommendSection();
         } else {
-            document.getElementById('recommend-results').innerHTML =
-                '<div class="empty-state"><i data-lucide="frown"></i><div class="empty-state-text">추천 결과가 없습니다</div></div>';
-            lucide.createIcons();
+            sessionRecommendResult = [];
+            renderRecommendSection();
+            const container = document.getElementById('recommend-results');
+            if (container) {
+                container.innerHTML =
+                    '<div class="empty-state"><i data-lucide="frown"></i><div class="empty-state-text">추천 결과가 없습니다</div></div>';
+                lucide.createIcons();
+            }
         }
     } catch (error) {
         console.error('추천 요청 실패:', error);
         showToast('추천 요청 중 오류가 발생했습니다.');
     } finally { showLoading(false); }
+}
+
+/** 추천 영역 렌더링: 세션에 개별 추천 결과가 있으면 표시, 없으면 오늘의 추천 TOP3 표시 */
+function renderRecommendSection() {
+    const dailySection = document.getElementById('daily-section');
+    const recommendWrapper = document.getElementById('recommend-results-wrapper');
+    const recommendResults = document.getElementById('recommend-results');
+    if (!dailySection || !recommendWrapper || !recommendResults) return;
+
+    if (sessionRecommendResult !== null && sessionRecommendResult.length > 0) {
+        dailySection.style.display = 'none';
+        recommendWrapper.style.display = 'block';
+        displayRecommendations(sessionRecommendResult, 'recommend-results');
+    } else if (sessionRecommendResult !== null && sessionRecommendResult.length === 0) {
+        dailySection.style.display = 'none';
+        recommendWrapper.style.display = 'block';
+        recommendResults.innerHTML =
+            '<div class="empty-state"><i data-lucide="frown"></i><div class="empty-state-text">추천 결과가 없습니다</div></div>';
+        lucide.createIcons();
+    } else {
+        recommendWrapper.style.display = 'none';
+        recommendResults.innerHTML = '';
+    }
 }
 
 async function loadDailyRecommendations() {
@@ -217,6 +247,7 @@ async function loadDailyRecommendations() {
                 `${today.getMonth()+1}/${today.getDate()} 추천`;
             displayRecommendations(data.data, 'daily-results');
         }
+        renderRecommendSection();
     } catch (e) { /* silent */ }
 }
 

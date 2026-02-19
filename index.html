@@ -6,7 +6,12 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>오늘 점심, 여기</title>
+    <title>오늘점심,여기</title>
+    <meta name="application-name" content="오늘점심,여기">
+    <meta name="apple-mobile-web-app-title" content="오늘점심,여기">
+    <link rel="icon" href="icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="lunch.css">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -15,7 +20,7 @@
         <!-- 헤더 -->
         <header class="header">
             <div class="header-inner">
-                <h1 id="main-title">오늘 점심, 여기</h1>
+                <h1 id="main-title">오늘점심,여기</h1>
             </div>
             <p class="header-sub">어떤 맛있는 점심을 먹어볼까요?</p>
         </header>
@@ -46,7 +51,7 @@
                         <i data-lucide="sparkles" class="btn-icon"></i> 추천 받기
                     </button>
 
-                    <!-- 오늘의 추천 -->
+                    <!-- 오늘의 추천 (기본 표시, 개별 추천 시 숨김) -->
                     <div id="daily-section" class="daily-section" style="display:none;">
                         <div class="section-header">
                             <h3 class="section-title">오늘의 추천 맛집</h3>
@@ -55,7 +60,13 @@
                         <div id="daily-results" class="results-container"></div>
                     </div>
 
-                    <div id="recommend-results" class="results-container"></div>
+                    <!-- 맞춤 추천 (추천 받기 클릭 시에만 표시, 세션 내 유지) -->
+                    <div id="recommend-results-wrapper" style="display:none;">
+                        <div class="section-header">
+                            <h3 class="section-title">맞춤 추천</h3>
+                        </div>
+                        <div id="recommend-results" class="results-container"></div>
+                    </div>
                 </div>
             </div>
 
