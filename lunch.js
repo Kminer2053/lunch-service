@@ -185,6 +185,7 @@ async function requestRecommendation(text, preset = [], exclude = []) {
         if (data.success && data.data?.length > 0) {
             sessionRecommendResult = data.data;
             renderRecommendSection();
+            showToast('맞춤 추천이 완료되었습니다.');
         } else {
             sessionRecommendResult = [];
             renderRecommendSection();
