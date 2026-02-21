@@ -281,7 +281,7 @@ function formatRecommendationsForShare(recommendations) {
         if (item.category) text += `🏷️ 카테고리: ${item.category}\n`;
         if (item.walk_min) text += `🚶 도보: ${item.walk_min}분\n`;
         return text.trim();
-    }).join('\n\n') + '\n\n🍽️ 오늘점심,여기';
+    }).join('\n\n') + '\n\n🍽️ 오늘점심,여기\n' + (typeof window !== 'undefined' ? window.location.origin : 'https://lunch-service.vercel.app');
 }
 
 /** 클립보드에 추천 텍스트 복사 */
