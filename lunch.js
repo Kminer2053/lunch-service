@@ -34,11 +34,13 @@ let editMode = false;
 let editingPlaceId = null;
 let placesData = []; // 관리자 페이지에서 사용할 장소 데이터
 let sessionRecommendResult = null; // 세션 내 개별 추천 결과 (추천 받기 클릭 시 저장, 새로고침 시 초기화)
+let shareRecommendationsData = {}; // 공유하기용 추천 데이터 (containerId별)
 
 // 초기화
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initRecommend();
+    initShareButtons();
     initList();
     initRegister();
     initAdmin();
@@ -218,6 +220,8 @@ function renderRecommendSection() {
         recommendWrapper.style.display = 'block';
         recommendResults.innerHTML =
             '<div class="empty-state"><i data-lucide="frown"></i><div class="empty-state-text">추천 결과가 없습니다</div></div>';
+        const recShareSection = document.getElementById('recommend-share-section');
+        if (recShareSection) recShareSection.style.display = 'none';
         lucide.createIcons();
     } else {
         recommendWrapper.style.display = 'none';
@@ -265,7 +269,65 @@ function bindImageErrorHandlers(container) {
     });
 }
 
+/** 추천 결과를 카톡 등에 붙여넣기용 텍스트로 포맷 */
+function formatRecommendationsForShare(recommendations) {
+    if (!recommendations || recommendations.length === 0) return '';
+    return recommendations.map((item, i) => {
+        const emoji = i === 0 ? '1️⃣' : i === 1 ? '2️⃣' : '3️⃣';
+        let text = `${emoji} ${item.name || '이름 없음'}\n`;
+        if (item.reason) text += `📍 이유: ${item.reason}\n`;
+        if (item.address_text) text += `📍 주소: ${item.address_text}\n`;
+        if (item.naver_map_url) text += `🗺️ 지도: ${item.naver_map_url}\n`;
+        if (item.category) text += `🏷️ 카테고리: ${item.category}\n`;
+        if (item.walk_min) text += `🚶 도보: ${item.walk_min}분\n`;
+        return text.trim();
+    }).join('\n\n') + '\n\n🍽️ 오늘점심,여기';
+}
+
+/** 클립보드에 추천 텍스트 복사 */
+async function copyRecommendationsToClipboard(recommendations) {
+    const text = formatRecommendationsForShare(recommendations);
+    if (!text) { showToast('공유할 내용이 없습니다.'); return; }
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast('클립보드에 복사되었습니다. 카톡에 붙여넣기 해보세요!');
+    } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+            document.execCommand('copy');
+            showToast('클립보드에 복사되었습니다. 카톡에 붙여넣기 해보세요!');
+        } catch (e2) {
+            showToast('복사에 실패했습니다.');
+        }
+        document.body.removeChild(ta);
+    }
+}
+
+function initShareButtons() {
+    document.querySelectorAll('.share-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const source = btn.getAttribute('data-share-source');
+            const data = shareRecommendationsData[source];
+            if (data && data.length > 0) {
+                copyRecommendationsToClipboard(data);
+            } else {
+                showToast('공유할 추천 결과가 없습니다.');
+            }
+        });
+    });
+}
+
 function displayRecommendations(recommendations, containerId) {
+    shareRecommendationsData[containerId] = recommendations || [];
+    const shareSectionId = containerId === 'daily-results' ? 'daily-share-section' : 'recommend-share-section';
+    const shareSection = document.getElementById(shareSectionId);
+    if (shareSection) {
+        shareSection.style.display = (recommendations && recommendations.length > 0) ? 'block' : 'none';
+    }
+
     const container = document.getElementById(containerId);
     container.innerHTML = recommendations.map((place, index) => {
         // place_id가 있고 image_url이 없으면 allPlaces에서 찾아서 사용

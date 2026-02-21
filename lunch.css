@@ -117,6 +117,9 @@ body {
 /* ===== 일일 추천 ===== */
 .daily-section { margin-top: 8px; }
 
+/* ===== 공유하기 ===== */
+.share-section { margin-top: 16px; }
+
 /* ===== 결과 카드 ===== */
 .results-container { display: flex; flex-direction: column; gap: 12px; }
 .place-card {
